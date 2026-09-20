@@ -1,0 +1,56 @@
+{
+  "dataset_name": "Field Test Companion Camera-Domain Dataset",
+  "version": "1.0.0",
+  "task": "non_diagnostic_object_format_classification",
+  "classes": [
+    "lateral_flow_cassette",
+    "non_test_object"
+  ],
+  "description": "Camera-domain dataset structure for visual modality and physical object-format recognition under real-world mobile lighting, angles, and camera sensors. This dataset contains NO drug labels, NO substance confirmations, and NO positive/negative test results.",
+  "target_counts": {
+    "lateral_flow_cassette": "80-100",
+    "non_test_object": "80-100",
+    "total_target": "160-200"
+  },
+  "actual_counts": {
+    "train": {
+      "lateral_flow_cassette": 0,
+      "non_test_object": 0
+    },
+    "val": {
+      "lateral_flow_cassette": 0,
+      "non_test_object": 0
+    },
+    "test": {
+      "lateral_flow_cassette": 0,
+      "non_test_object": 0
+    },
+    "total": 0
+  },
+  "collection_status": "INSUFFICIENT_FOR_TRAINING",
+  "missing_samples_required": {
+    "lateral_flow_cassette": "80-100",
+    "non_test_object": "80-100"
+  },
+  "allowed_provenance_values": [
+    "project_real_capture",
+    "external_open_reference",
+    "synthetic_demo"
+  ],
+  "schema": {
+    "image_id": "string (unique identifier, e.g. 'CAM_CASSETTE_001')",
+    "label": "string ('lateral_flow_cassette' | 'non_test_object')",
+    "source": "string (contributor or collection campaign name)",
+    "device_model": "string (e.g. 'Samsung S22', 'Pixel 7', 'iPhone 13')",
+    "os_version": "string (e.g. 'Android 14', 'iOS 17.4')",
+    "lighting_condition": "string ('indoor_normal' | 'warm_light' | 'daylight' | 'mild_shadow' | 'low_light')",
+    "orientation": "string ('portrait' | 'landscape' | '15deg_tilt')",
+    "distance_category": "string ('close' | 'medium' | 'far')",
+    "resolution": "string (e.g. '1080x1920')",
+    "timestamp": "string (ISO-8601 UTC)",
+    "sha256": "string (64-char hexadecimal digest)",
+    "provenance": "string ('project_real_capture' | 'external_open_reference' | 'synthetic_demo')",
+    "notes": "string (contextual observations)"
+  },
+  "images": []
+}

@@ -39,3 +39,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Backend
+backend/venv/
+**/__pycache__/
+**/*.db
+backend/evidence_images/*
+!backend/evidence_images/.gitkeep

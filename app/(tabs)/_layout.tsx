@@ -1,35 +1,51 @@
 import { SymbolView } from 'expo-symbols';
 import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import TopNavigation from '@/components/TopNavigation';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
   return (
-    <Tabs
+    <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+      <TopNavigation />
+      <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
+        tabBarActiveTintColor: '#1D5D8F',
+        tabBarInactiveTintColor: '#64748B',
+        headerTintColor: '#142536',
+        headerTitleStyle: {
+          fontWeight: '700',
+          fontSize: 18,
+        },
+        headerStyle: {
+          backgroundColor: '#FFFFFF',
+        },
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E2E8F0',
+        },
+        headerShown: false,
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Tab One',
+          title: 'Home',
+          headerTitle: 'Field Test Companion',
+          tabBarLabel: 'Home',
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
+                ios: 'house.fill',
+                android: 'home',
+                web: 'home',
               }}
               tintColor={color}
-              size={28}
+              size={24}
             />
           ),
           headerRight: () => (
@@ -38,8 +54,8 @@ export default function TabLayout() {
                 {({ pressed }) => (
                   <SymbolView
                     name={{ ios: 'info.circle', android: 'info', web: 'info' }}
-                    size={25}
-                    tintColor={Colors[colorScheme].text}
+                    size={22}
+                    tintColor="#1D5D8F"
                     style={{ opacity: pressed ? 0.5 : 1 }}
                   />
                 )}
@@ -51,20 +67,44 @@ export default function TabLayout() {
       <Tabs.Screen
         name="two"
         options={{
-          title: 'Tab Two',
+          title: 'Records',
+          headerTitle: 'Test Records',
+          tabBarLabel: 'Records',
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <SymbolView
               name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
+                ios: 'doc.text.fill',
+                android: 'description',
+                web: 'description',
               }}
               tintColor={color}
-              size={28}
+              size={24}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="dataset"
+        options={{
+          title: 'Dataset',
+          headerTitle: 'Dataset Collection',
+          tabBarLabel: 'Dataset',
+          headerShown: false,
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: 'camera.viewfinder',
+                android: 'collections',
+                web: 'collections',
+              }}
+              tintColor={color}
+              size={24}
             />
           ),
         }}
       />
     </Tabs>
+    </View>
   );
 }

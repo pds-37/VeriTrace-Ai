@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Test Companion - Lab Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .hidden { display: none !important; }
+        .hash-font { font-family: 'Courier New', Courier, monospace; font-size: 0.85rem; color: #4B5563; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans h-screen flex overflow-hidden">
+
+    <!-- LOGIN OVERLAY -->
+    <div id="login-overlay" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full">
+            <div class="flex justify-center mb-4">
+                <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white text-2xl font-bold">🔬</div>
+            </div>
+            <h2 class="text-2xl font-bold text-center text-slate-800 mb-2">Lab Portal</h2>
+            <p class="text-sm text-center text-slate-500 mb-6">Sign in to view Chain of Custody</p>
+            
+            <form id="login-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Username</label>
+                    <input type="text" id="username" value="admin" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Password</label>
+                    <input type="password" id="password" value="admin123" class="mt-1 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                </div>
+                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Authenticate
+                </button>
+                <p id="login-error" class="text-red-500 text-sm text-center hidden"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP (Hidden until login) -->
+    <div id="app-container" class="flex flex-col w-full h-full hidden">
+        
+        <!-- HEADER -->
+        <header class="bg-white shadow-sm z-10 border-b border-slate-200 flex justify-between items-center px-6 py-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold">FT</div>
+                <h1 class="text-xl font-bold text-slate-800">Field Test Companion <span class="text-sm font-normal text-slate-500 ml-2">Lab Dashboard</span></h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1 rounded-full">🟢 Connected</span>
+                <button id="logout-btn" class="text-sm text-slate-500 hover:text-slate-800">Sign out</button>
+            </div>
+        </header>
+
+        <!-- CONTENT -->
+        <main class="flex-1 overflow-auto bg-slate-50 p-6">
+            
+            <!-- METRICS -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                    <p class="text-sm text-slate-500 font-medium">Total Evidence Records</p>
+                    <p id="metric-total" class="text-3xl font-bold text-slate-800 mt-1">--</p>
+                </div>
+                <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                    <p class="text-sm text-slate-500 font-medium">Chain Integrity</p>
+                    <p class="text-3xl font-bold text-emerald-600 mt-1">100%</p>
+                </div>
+                <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm">
+                    <p class="text-sm text-slate-500 font-medium">Tampered Evidence</p>
+                    <p class="text-3xl font-bold text-slate-800 mt-1">0</p>
+                </div>
+                <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
+                    <button id="export-csv-btn" class="bg-slate-800 text-white px-4 py-2 rounded-md font-medium hover:bg-slate-700 transition flex items-center justify-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        Export CSV Ledger
+                    </button>
+                </div>
+            </div>
+
+            <!-- DATA TABLE -->
+            <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[calc(100vh-250px)]">
+                <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <h2 class="text-lg font-semibold text-slate-800">Chain of Custody Ledger</h2>
+                    <button id="refresh-btn" class="text-sm text-blue-600 hover:text-blue-800 font-medium">↻ Refresh Data</button>
+                </div>
+                
+                <div class="overflow-y-auto flex-1">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50 sticky top-0 z-10">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Seq</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Sample Ref</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Timestamp</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Operator</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Record Hash</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="records-tbody" class="bg-white divide-y divide-slate-200">
+                            <!-- Rows injected via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- VERIFICATION MODAL -->
+    <div id="verify-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800">Cryptographic Verification</h3>
+                <button id="close-modal-btn" class="text-slate-400 hover:text-slate-600 font-bold text-xl">&times;</button>
+            </div>
+            <div class="p-6" id="verify-content">
+                <div class="flex justify-center my-8">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+        const BASE_URL = window.location.origin;
+
+        // UI Elements
+        const loginOverlay = document.getElementById('login-overlay');
+        const appContainer = document.getElementById('app-container');
+        const loginForm = document.getElementById('login-form');
+        const loginError = document.getElementById('login-error');
+        const recordsTbody = document.getElementById('records-tbody');
+        const metricTotal = document.getElementById('metric-total');
+        
+        // Modal Elements
+        const verifyModal = document.getElementById('verify-modal');
+        const verifyContent = document.getElementById('verify-content');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
+        // Check if already logged in
+        const storedToken = localStorage.getItem('ftc_token');
+        if (storedToken) {
+            authToken = storedToken;
+            showApp();
+        }
+
+        // Login Handler
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/auth/token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    authToken = data.access_token;
+                    localStorage.setItem('ftc_token', authToken);
+                    loginError.classList.add('hidden');
+                    showApp();
+                } else {
+                    loginError.textContent = 'Invalid credentials or no admin access.';
+                    loginError.classList.remove('hidden');
+                }
+            } catch (err) {
+                loginError.textContent = 'Network error.';
+                loginError.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            localStorage.removeItem('ftc_token');
+            authToken = null;
+            appContainer.classList.add('hidden');
+            loginOverlay.classList.remove('hidden');
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', fetchRecords);
+        
+        document.getElementById('export-csv-btn').addEventListener('click', async () => {
+            try {
+                const res = await fetch(`${BASE_URL}/api/export`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `chain_of_custody_${new Date().getTime()}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    alert("Failed to export CSV. Ensure you are an Admin.");
+                }
+            } catch(e) {
+                alert("Error downloading CSV");
+            }
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            verifyModal.classList.add('hidden');
+        });
+
+        function showApp() {
+            loginOverlay.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            fetchRecords();
+        }
+
+        async function fetchRecords() {
+            try {
+                recordsTbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-500">Loading records...</td></tr>';
+                
+                const res = await fetch(`${BASE_URL}/api/records?limit=100&order=desc`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.status === 401) {
+                    // Token expired
+                    document.getElementById('logout-btn').click();
+                    return;
+                }
+
+                if (res.ok) {
+                    const data = await res.json();
+                    metricTotal.textContent = data.total_count;
+                    renderTable(data.records);
+                } else {
+                    recordsTbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-500">Failed to load records.</td></tr>';
+                }
+            } catch (err) {
+                recordsTbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-500">Network error.</td></tr>';
+            }
+        }
+
+        function renderTable(records) {
+            recordsTbody.innerHTML = '';
+            if (records.length === 0) {
+                recordsTbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-500">No evidence records synced yet.</td></tr>';
+                return;
+            }
+
+            records.forEach(rec => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">#${rec.sequence_number}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-900 font-medium">${rec.sample_reference_id}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">${new Date(rec.timestamp || rec.created_at).toLocaleString()}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                        <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-semibold">${rec.operator_id}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm hash-font truncate max-w-[200px]" title="${rec.record_hash}">${rec.record_hash.substring(0, 16)}...</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <button onclick="verifyRecord('${rec.record_id}')" class="text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-3 py-1 rounded border border-emerald-200">Verify Hashes</button>
+                    </td>
+                `;
+                recordsTbody.appendChild(tr);
+            });
+        }
+
+        async function verifyRecord(recordId) {
+            verifyModal.classList.remove('hidden');
+            verifyContent.innerHTML = '<div class="flex justify-center my-8"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>';
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/records/${recordId}/verify`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    const statusColor = data.is_valid ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-red-600 bg-red-50 border-red-200';
+                    const icon = data.is_valid ? '✓ SECURE' : '⚠ TAMPERED';
+
+                    verifyContent.innerHTML = `
+                        <div class="flex items-center justify-between mb-6">
+                            <div>
+                                <h4 class="text-lg font-bold text-slate-800">Verification Result</h4>
+                                <p class="text-sm text-slate-500">Record ID: <span class="hash-font">${recordId}</span></p>
+                            </div>
+                            <div class="px-4 py-2 rounded border font-bold ${statusColor}">${icon}</div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="bg-slate-50 p-4 rounded border border-slate-200">
+                                <p class="text-xs font-bold text-slate-500 uppercase mb-1">Stored Hash (Database)</p>
+                                <p class="hash-font break-all text-sm">${data.stored_hash}</p>
+                            </div>
+                            
+                            <div class="bg-slate-50 p-4 rounded border border-slate-200">
+                                <p class="text-xs font-bold text-slate-500 uppercase mb-1">Recalculated Hash (Real-time)</p>
+                                <p class="hash-font break-all text-sm ${data.is_valid ? 'text-emerald-700' : 'text-red-600'}">${data.calculated_hash}</p>
+                            </div>
+
+                            <div class="bg-slate-50 p-4 rounded border border-slate-200">
+                                <p class="text-xs font-bold text-slate-500 uppercase mb-1">Previous Block Hash (Chain Link)</p>
+                                <p class="hash-font break-all text-sm">${data.previous_record_hash}</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-6">
+                            <h5 class="text-sm font-bold text-slate-800 mb-2">Audit Details</h5>
+                            <ul class="text-sm text-slate-600 space-y-1">
+                                ${data.details.map(d => `<li>• ${d}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                } else {
+                    verifyContent.innerHTML = '<p class="text-red-500 text-center py-8">Verification request failed.</p>';
+                }
+            } catch (err) {
+                verifyContent.innerHTML = '<p class="text-red-500 text-center py-8">Network error during verification.</p>';
+            }
+        }
+    </script>
+</body>
+</html>
