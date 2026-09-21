@@ -47,6 +47,25 @@ export default function HomeScreen() {
 
       <ScrollView contentContainerStyle={styles.container}>
 
+        {/* SIH 2026 Judge Banner */}
+        <Pressable
+          style={styles.sihBanner}
+          onPress={() => router.push('/about')}
+          accessibilityRole="button"
+          accessibilityLabel="View Smart India Hackathon Presentation"
+        >
+          <View style={styles.sihBannerHeader}>
+            <View style={styles.sihBannerBadge}>
+              <Text style={styles.sihBannerBadgeText}>🏆 SIH 2026 EVALUATION</Text>
+            </View>
+            <Text style={styles.sihBannerArrow}>Explore Pitch →</Text>
+          </View>
+          <Text style={styles.sihBannerTitle}>VeriTrace AI: Project Overview & Architecture</Text>
+          <Text style={styles.sihBannerSub}>
+            Complete technical defense, 7-stage edge CV/AI telemetry breakdown, OOD safety benchmarks, and live demo protocol.
+          </Text>
+        </Pressable>
+
         {/* Welcome */}
         <View style={styles.welcome}>
           <Text style={styles.eyebrow}>FIELD OPERATIONS</Text>
@@ -206,6 +225,53 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     marginTop: 3,
+  },
+  sihBanner: {
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#334155',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  sihBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  sihBannerBadge: {
+    backgroundColor: '#FF7F50',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  sihBannerBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  sihBannerArrow: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  sihBannerTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  sihBannerSub: {
+    color: '#94A3B8',
+    fontSize: 13,
+    lineHeight: 19,
   },
   welcome: {
     backgroundColor: '#FFFFFF',

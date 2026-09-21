@@ -108,9 +108,21 @@ export default function TabLayout() {
       <Tabs.Screen
         name="about"
         options={{
-          title: 'About',
+          title: 'Overview',
+          headerTitle: 'SIH Project Overview',
+          tabBarLabel: 'Overview',
           headerShown: false,
-          tabBarItemStyle: { display: 'none' } // don't show on mobile bottom bar
+          tabBarIcon: ({ color }) => (
+            <SymbolView
+              name={{
+                ios: 'sparkles',
+                android: 'auto_awesome',
+                web: 'auto_awesome',
+              }}
+              tintColor={color}
+              size={24}
+            />
+          ),
         }}
       />
     </Tabs>

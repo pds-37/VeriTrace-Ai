@@ -159,12 +159,11 @@ export async function uploadImageAsync(imageUri: string, expectedHash: string): 
   try {
     const uploadResult = await FileSystem.uploadAsync(endpoint, imageUri, {
       httpMethod: 'POST',
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+      uploadType: (FileSystem as any).FileSystemUploadType?.MULTIPART ?? (FileSystem as any).UploadType?.MULTIPART,
       fieldName: 'file',
       mimeType: 'image/jpeg',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Bypass-Tunnel-Reminder': 'true',
         'Bypass-Tunnel-Reminder': 'true'
       },
     });

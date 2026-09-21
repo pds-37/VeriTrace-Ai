@@ -8,10 +8,10 @@ export default function TopNavigation() {
   const [role, setRole] = useState<'User' | 'Admin'>('User');
 
   const tabs = [
-    { label: 'Home', route: '/' },
+    { label: 'Overview (SIH)', route: '/about' },
+    { label: 'Field App', route: '/' },
     { label: 'Records', route: '/two' },
     { label: 'Dataset', route: '/dataset' },
-    { label: 'About', route: '/about' },
   ];
 
   return (
