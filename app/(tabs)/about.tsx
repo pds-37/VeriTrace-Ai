@@ -463,28 +463,87 @@ export default function AboutScreen() {
                   
                   <View style={[
                     styles.simFramePlaceholder, 
-                    { backgroundColor: simSample === 'assay' ? '#F1F5F9' : '#FEF9C3' }
+                    { backgroundColor: simSample === 'assay' ? '#F8FAFC' : '#FEFCE8' }
                   ]}>
+                    {/* Viewfinder HUD Top Bar */}
+                    <View style={styles.hudTopBar}>
+                      <Text style={styles.hudLabel}>CAM-01 · OPTICAL FEED</Text>
+                      <View style={[
+                        styles.hudStatusTag, 
+                        { backgroundColor: simSample === 'assay' ? '#DCFCE7' : '#FEE2E2' }
+                      ]}>
+                        <Text style={[
+                          styles.hudStatusText,
+                          { color: simSample === 'assay' ? '#15803D' : '#DC2626' }
+                        ]}>
+                          {simSample === 'assay' ? 'ROI LOCKED' : 'OOD REJECTED'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Viewfinder Center Target */}
                     <View style={[
                       styles.simRoiBox,
                       { 
-                        backgroundColor: simSample === 'assay' ? '#64748B' : '#FACC15',
-                        borderColor: simSample === 'assay' ? '#1D5D8F' : '#CA8A04',
+                        backgroundColor: simSample === 'assay' ? '#FFFFFF' : '#FEF08A',
+                        borderColor: simSample === 'assay' ? '#0284C7' : '#DC2626',
                       }
                     ]}>
-                      <Text style={styles.simRoiLabel}>
-                        {simSample === 'assay' ? 'Active Reaction ROI' : 'Detected Yellow Surface'}
-                      </Text>
+                      {simSample === 'assay' ? (
+                        <View style={styles.cassetteGraphic}>
+                          <View style={styles.sampleWell}><Text style={styles.wellText}>S</Text></View>
+                          <View style={styles.reactionWindow}>
+                            <View style={styles.bandC}><Text style={styles.bandText}>C</Text></View>
+                            <View style={styles.bandT}><Text style={styles.bandText}>T</Text></View>
+                          </View>
+                          <Text style={styles.roiActiveTag}>ROI: 160×64</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.oodGraphic}>
+                          <Text style={styles.oodWarningIcon}>⚠️</Text>
+                          <Text style={styles.oodWarningText}>UNCALIBRATED SURFACE</Text>
+                          <Text style={styles.oodSubText}>Arbitrary Yellow Pigment</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Viewfinder HUD Bottom Line */}
+                    <View style={styles.hudBottomBar}>
+                      <Text style={styles.hudBottomText}>FOV: 48.2° · Latency: 0.12ms</Text>
+                      <Text style={styles.hudBottomText}>Z-Gate: Active</Text>
                     </View>
                   </View>
 
+                  {/* Hash Provenance Bar */}
                   <View style={styles.simHashRow}>
                     <Text style={styles.simHashLabel}>SHA-256:</Text>
                     <Text style={styles.simHashValue}>
                       {simSample === 'assay'
-                        ? '3a7c9f81d4e0b25916...8c1f (Valid)'
-                        : '8b91e4a3d720c51483...4e72 (Non-Assay)'}
+                        ? '3a7c9f81d4e0b25916...8c1f (Sealed)'
+                        : '8b91e4a3d720c51483...4e72 (Corrupted)'}
                     </Text>
+                  </View>
+
+                  {/* ROI & Camera Metadata (fills dead space evenly) */}
+                  <View style={styles.simMetaGrid}>
+                    <View style={styles.simMetaItem}>
+                      <Text style={styles.simMetaLabel}>Bounding Box:</Text>
+                      <Text style={styles.simMetaVal}>{simSample === 'assay' ? '[142, 88, 116, 48]' : '[90, 60, 220, 110]'}</Text>
+                    </View>
+                    <View style={styles.simMetaItem}>
+                      <Text style={styles.simMetaLabel}>Aspect Ratio:</Text>
+                      <Text style={styles.simMetaVal}>{simSample === 'assay' ? '2.41 (Strip)' : '2.00 (Surface)'}</Text>
+                    </View>
+                    <View style={styles.simMetaItem}>
+                      <Text style={styles.simMetaLabel}>Locate Algorithm:</Text>
+                      <Text style={styles.simMetaVal}>{simSample === 'assay' ? 'Adaptive Gradient' : 'Safety Fallback'}</Text>
+                    </View>
+                    <View style={styles.simMetaItem}>
+                      <Text style={styles.simMetaLabel}>Boundary Quality:</Text>
+                      <Text style={[styles.simMetaVal, { color: simSample === 'assay' ? '#15803D' : '#DC2626' }]}>
+                        {simSample === 'assay' ? '0.94 / 1.00' : '0.12 / 1.00'}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -503,7 +562,7 @@ export default function AboutScreen() {
                         {simSample === 'assay' ? '#64748B' : '#FACC15'}
                       </Text>
                       <Text style={styles.swatchRgb}>
-                        {simSample === 'assay' ? 'RGB(100, 116, 139)' : 'RGB(250, 204, 21)'}
+                        {simSample === 'assay' ? 'RGB(100, 116, 139) · L1=[0.28, 0.33, 0.39]' : 'RGB(250, 204, 21) · L1=[0.53, 0.43, 0.04]'}
                       </Text>
                     </View>
                   </View>
@@ -535,16 +594,16 @@ export default function AboutScreen() {
                     </View>
                   </View>
 
-                  {/* Quantitative Numbers */}
+                  {/* Quantitative Numbers (Balanced 2x2 Grid) */}
                   <View style={styles.simNumbersGrid}>
                     <View style={styles.simNumberItem}>
                       <Text style={styles.simNumberLabel}>Luminance Intensity:</Text>
-                      <Text style={styles.simNumberVal}>{simSample === 'assay' ? '113.8' : '207.2'}</Text>
+                      <Text style={styles.simNumberVal}>{simSample === 'assay' ? '113.8 (Rec. 601)' : '207.2 (Saturated)'}</Text>
                     </View>
 
                     <View style={styles.simNumberItem}>
-                      <Text style={styles.simNumberLabel}>Reference ΔE:</Text>
-                      <Text style={styles.simNumberVal}>{simSample === 'assay' ? '4.82 (Baseline)' : '184.6 (Extreme)'}</Text>
+                      <Text style={styles.simNumberLabel}>Reference Delta (ΔE):</Text>
+                      <Text style={styles.simNumberVal}>{simSample === 'assay' ? '4.82 (Nominal)' : '184.6 (Extreme)'}</Text>
                     </View>
 
                     <View style={styles.simNumberItem}>
@@ -553,17 +612,17 @@ export default function AboutScreen() {
                         styles.simNumberVal, 
                         { color: simSample === 'assay' ? '#15803D' : '#DC2626', fontWeight: '800' }
                       ]}>
-                        {simSample === 'assay' ? '3.42 (≤ 8.5)' : '527.63 (> 8.5)'}
+                        {simSample === 'assay' ? '3.42 (≤ 8.5 PASSED)' : '527.63 (> 8.5 EXCEEDED)'}
                       </Text>
                     </View>
 
                     <View style={styles.simNumberItem}>
-                      <Text style={styles.simNumberLabel}>Max |Z| Score:</Text>
+                      <Text style={styles.simNumberLabel}>Max Feature |Z|-Score:</Text>
                       <Text style={[
                         styles.simNumberVal, 
                         { color: simSample === 'assay' ? '#15803D' : '#DC2626', fontWeight: '800' }
                       ]}>
-                        {simSample === 'assay' ? '1.84 (≤ 5.0)' : '142.1 (> 5.0)'}
+                        {simSample === 'assay' ? '1.84 (≤ 5.0 NOMINAL)' : '142.1 (> 5.0 OUT-OF-RANGE)'}
                       </Text>
                     </View>
                   </View>
@@ -573,16 +632,27 @@ export default function AboutScreen() {
                     styles.simDecisionBanner,
                     simSample === 'assay' ? styles.decisionAccepted : styles.decisionRejected
                   ]}>
-                    <Text style={[
-                      styles.decisionTitle,
-                      { color: simSample === 'assay' ? '#166534' : '#991B1B' }
-                    ]}>
-                      {simSample === 'assay' ? '✅ STATUS: KNOWN (In-Distribution)' : '🛡️ STATUS: UNKNOWN (Out-of-Distribution)'}
-                    </Text>
+                    <View style={styles.decisionHeaderRow}>
+                      <View style={[
+                        styles.decisionBadge,
+                        { backgroundColor: simSample === 'assay' ? '#15803D' : '#DC2626' }
+                      ]}>
+                        <Text style={styles.decisionBadgeText}>
+                          {simSample === 'assay' ? 'PASSED' : 'REJECTED'}
+                        </Text>
+                      </View>
+                      <Text style={[
+                        styles.decisionTitle,
+                        { color: simSample === 'assay' ? '#166534' : '#991B1B' }
+                      ]}>
+                        {simSample === 'assay' ? 'STATUS: KNOWN (In-Distribution)' : 'STATUS: UNKNOWN (Out-of-Distribution)'}
+                      </Text>
+                    </View>
+
                     <Text style={styles.decisionDesc}>
                       {simSample === 'assay'
-                        ? 'Model evaluates modality as "lateral_flow_strip" with 94.2% softmax score. Centroid distance 3.42 is well within the 8.5 limit.'
-                        : 'Dual-Constraint OOD Gate triggered! Centroid distance (527.63 > 8.5) and Max |Z| (142.1 > 5.0) rejected the sample. Softmax prediction is SUPPRESSED to prevent false reporting.'}
+                        ? 'Modality classified as "lateral_flow_strip" with 94.2% softmax score. Centroid distance (3.42 ≤ 8.5) confirms authentic in-distribution assay geometry.'
+                        : 'Dual-Constraint OOD Gate triggered: Centroid distance (527.63 > 8.5) and Max |Z| (142.1 > 5.0) exceeded safety bounds. Softmax output is SUPPRESSED to guarantee zero false confidence.'}
                     </Text>
                   </View>
 
@@ -1342,10 +1412,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   simSwitchActiveYellow: {
-    backgroundColor: '#FEF08A',
-    shadowColor: '#CA8A04',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    shadowColor: '#D97706',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
   },
   simSwitchText: {
@@ -1360,6 +1432,7 @@ const styles = StyleSheet.create({
   simBody: {
     flexDirection: Platform.OS === 'web' ? 'row' : 'column',
     gap: 20,
+    alignItems: 'stretch',
   },
   simVisualCard: {
     flex: 1,
@@ -1368,6 +1441,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    justifyContent: 'space-between',
   },
   simVisualTitle: {
     fontSize: 14,
@@ -1376,33 +1450,134 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   simFramePlaceholder: {
-    height: 200,
+    height: 190,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#CBD5E1',
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  hudTopBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
+    justifyContent: 'space-between',
+  },
+  hudLabel: {
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    color: '#64748B',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  hudStatusTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  hudStatusText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   simRoiBox: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 2,
     borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignSelf: 'center',
+    width: '85%',
   },
-  simRoiLabel: {
-    color: '#FFFFFF',
+  cassetteGraphic: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sampleWell: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wellText: {
+    fontSize: 10,
     fontWeight: '800',
+    color: '#64748B',
+  },
+  reactionWindow: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 10,
+  },
+  bandC: {
+    backgroundColor: '#FDA4AF',
+    borderRadius: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  bandT: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  bandText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#881337',
+  },
+  roiActiveTag: {
+    fontSize: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    color: '#0284C7',
+    fontWeight: '700',
+  },
+  oodGraphic: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  oodWarningIcon: {
+    fontSize: 18,
+    marginBottom: 2,
+  },
+  oodWarningText: {
     fontSize: 12,
+    fontWeight: '800',
+    color: '#B45309',
     letterSpacing: 0.5,
   },
+  oodSubText: {
+    fontSize: 11,
+    color: '#92400E',
+  },
+  hudBottomBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  hudBottomText: {
+    fontSize: 9,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
   simHashRow: {
-    marginTop: 14,
+    marginTop: 12,
+    marginBottom: 10,
     flexDirection: 'row',
     gap: 6,
+    alignItems: 'center',
   },
   simHashLabel: {
     fontSize: 11,
@@ -1416,20 +1591,48 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
   },
+  simMetaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 12,
+  },
+  simMetaItem: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  simMetaLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  simMetaVal: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 2,
+  },
 
   simTelemetryCard: {
-    flex: 1.4,
+    flex: 1.3,
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    justifyContent: 'space-between',
   },
   swatchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   colorSwatchBox: {
     width: 36,
@@ -1444,8 +1647,9 @@ const styles = StyleSheet.create({
     color: '#0F172A',
   },
   swatchRgb: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#64748B',
+    marginTop: 2,
   },
 
   channelBarGroup: {
@@ -1489,11 +1693,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   simNumberItem: {
-    flex: 1,
-    minWidth: 140,
+    width: Platform.OS === 'web' ? '48.5%' : '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
-    padding: 10,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
@@ -1502,10 +1705,10 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   simNumberVal: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#0F172A',
-    marginTop: 2,
+    marginTop: 3,
   },
 
   simDecisionBanner: {
@@ -1521,10 +1724,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderColor: '#FCA5A5',
   },
-  decisionTitle: {
-    fontSize: 14,
+  decisionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  decisionBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  decisionBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
     fontWeight: '800',
-    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  decisionTitle: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   decisionDesc: {
     fontSize: 12,
@@ -1761,24 +1980,26 @@ const styles = StyleSheet.create({
      ========================================================================= */
   footerCtaCard: {
     width: '100%',
-    backgroundColor: '#0F172A',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: Platform.OS === 'web' ? 36 : 24,
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
   },
   footerCtaTitle: {
-    color: '#FFFFFF',
+    color: '#0F172A',
     fontSize: 24,
     fontWeight: '900',
     textAlign: 'center',
   },
   footerCtaSubtitle: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 14,
     textAlign: 'center',
     maxWidth: 640,
