@@ -70,12 +70,27 @@
                     <p class="text-sm text-slate-500 font-medium">Tampered Evidence</p>
                     <p class="text-3xl font-bold text-slate-800 mt-1">0</p>
                 </div>
-                <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
-                    <button id="export-csv-btn" class="bg-slate-800 text-white px-4 py-2 rounded-md font-medium hover:bg-slate-700 transition flex items-center justify-center">
+                <div class="bg-white p-5 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center space-y-2">
+                    <button id="export-csv-btn" class="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-700 transition flex items-center justify-center">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                         Export CSV Ledger
                     </button>
+                    <button id="verify-chain-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-emerald-700 transition flex items-center justify-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                        Verify Full Chain
+                    </button>
                 </div>
+            </div>
+
+            <!-- DEMO TAMPER ALERT -->
+            <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-bold text-red-800">SIH 2026 Video Demo Controls</h3>
+                    <p class="text-xs text-red-600">Simulate an attack on the SQLite database to demonstrate chain compromise detection.</p>
+                </div>
+                <button id="simulate-tamper-btn" class="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-red-700 transition">
+                    Simulate Database Tamper
+                </button>
             </div>
 
             <!-- DATA TABLE -->
@@ -264,13 +279,94 @@
                         <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-semibold">${rec.operator_id}</span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm hash-font truncate max-w-[200px]" title="${rec.record_hash}">${rec.record_hash.substring(0, 16)}...</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button onclick="verifyRecord('${rec.record_id}')" class="text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-3 py-1 rounded border border-emerald-200">Verify Hashes</button>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <button onclick="downloadJsonExport('${rec.record_id}')" class="text-blue-600 hover:text-blue-900 bg-blue-50 px-3 py-1 rounded border border-blue-200">Export JSON</button>
+                        <button onclick="verifyRecord('${rec.record_id}')" class="text-emerald-600 hover:text-emerald-900 bg-emerald-50 px-3 py-1 rounded border border-emerald-200">Verify Hash</button>
                     </td>
                 `;
                 recordsTbody.appendChild(tr);
             });
         }
+
+        async function downloadJsonExport(recordId) {
+            try {
+                const res = await fetch(`${BASE_URL}/api/export/${recordId}`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = `${recordId}_evidence_package.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    alert("Failed to export JSON.");
+                }
+            } catch(e) {
+                alert("Error exporting JSON");
+            }
+        }
+
+        document.getElementById('simulate-tamper-btn').addEventListener('click', async () => {
+            if(!confirm("Are you sure? This will permanently corrupt the latest record in the database for the demo.")) return;
+            try {
+                const res = await fetch(`${BASE_URL}/api/chain/simulate-tamper`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (res.ok) {
+                    alert("Tamper simulated successfully! Click Verify Full Chain to see the detection.");
+                } else {
+                    alert("Tamper failed.");
+                }
+            } catch (err) {
+                alert("Network error.");
+            }
+        });
+
+        document.getElementById('verify-chain-btn').addEventListener('click', async () => {
+            verifyModal.classList.remove('hidden');
+            verifyContent.innerHTML = '<div class="flex justify-center my-8"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div></div>';
+            
+            try {
+                const res = await fetch(`${BASE_URL}/api/chain/verify`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    if (data.is_valid) {
+                        verifyContent.innerHTML = `
+                            <div class="text-center py-8">
+                                <div class="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-4">✓</div>
+                                <h2 class="text-2xl font-bold text-emerald-700 mb-2">FULL CHAIN VERIFIED ✓</h2>
+                                <p class="text-slate-600">${data.valid_records_count} out of ${data.total_records} records are mathematically intact.</p>
+                                <p class="text-slate-500 text-xs mt-4">Head Hash: ${data.chain_head_hash.substring(0,24)}...</p>
+                            </div>
+                        `;
+                    } else {
+                        verifyContent.innerHTML = `
+                            <div class="text-center py-8">
+                                <div class="w-20 h-20 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-4xl mx-auto mb-4">⚠</div>
+                                <h2 class="text-2xl font-bold text-red-700 mb-2">CHAIN COMPROMISED</h2>
+                                <p class="text-slate-800 font-bold mb-2">${data.tampered_records_count} records have been tampered with!</p>
+                                <p class="text-red-600 text-sm break-all font-mono">Affected IDs: ${data.tampered_record_ids.join(', ')}</p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    verifyContent.innerHTML = '<p class="text-red-500 text-center py-8">Chain verification request failed.</p>';
+                }
+            } catch (err) {
+                verifyContent.innerHTML = '<p class="text-red-500 text-center py-8">Network error.</p>';
+            }
+        });
 
         async function verifyRecord(recordId) {
             verifyModal.classList.remove('hidden');

@@ -31,7 +31,7 @@ def test_export_evidence_package_success(client):
     rec = export_data["evidence_record"]
     assert rec["record_id"] == rec_id
     assert rec["sample_reference_id"] == "SMP-EXPORT-EVIDENCE"
-    assert rec["operator_id"] == "OP-FORENSIC-99"
+    assert rec["operator_id"] == "test_user"
     assert rec["location"]["latitude"] == 28.6139
     assert rec["location"]["longitude"] == 77.2090
 

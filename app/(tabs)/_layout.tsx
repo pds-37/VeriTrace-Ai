@@ -28,6 +28,7 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E2E8F0',
+          display: Platform.OS === 'web' ? 'none' : 'flex',
         },
         headerShown: false,
       }}>
@@ -102,6 +103,14 @@ export default function TabLayout() {
               size={24}
             />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="about"
+        options={{
+          title: 'About',
+          headerShown: false,
+          tabBarItemStyle: { display: 'none' } // don't show on mobile bottom bar
         }}
       />
     </Tabs>

@@ -40,7 +40,7 @@ def test_mobile_schema_camelcase_ingestion(client):
 
     assert data["record_id"] == "REC-MOBILE-001"
     assert data["sample_reference_id"] == "SMP-FIELD-M01"
-    assert data["operator_id"] == "OFFICER-789"
+    assert data["operator_id"] == "test_user"
     assert data["previous_record_hash"] == GENESIS_HASH
     assert len(data["record_hash"]) == 64
     assert data["sync_status"] == "synced"

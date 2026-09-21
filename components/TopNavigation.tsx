@@ -11,8 +11,7 @@ export default function TopNavigation() {
     { label: 'Home', route: '/' },
     { label: 'Records', route: '/two' },
     { label: 'Dataset', route: '/dataset' },
-    { label: 'Community', route: '#' },
-    { label: 'About', route: '#' },
+    { label: 'About', route: '/about' },
   ];
 
   return (

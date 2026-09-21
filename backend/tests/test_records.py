@@ -21,7 +21,7 @@ def test_create_record_success(client):
 
     assert data["record_id"] == "REC-2026-TEST-001"
     assert data["sample_reference_id"] == "SMP-2026-001"
-    assert data["operator_id"] == "OP-104"
+    assert data["operator_id"] == "test_user"
     assert data["sequence_number"] == 1
     assert data["previous_record_hash"] == GENESIS_HASH
     assert len(data["record_hash"]) == 64
