@@ -5,7 +5,6 @@ import { useRouter, usePathname } from 'expo-router';
 export default function TopNavigation() {
   const router = useRouter();
   const pathname = usePathname();
-  const [role, setRole] = useState<'User' | 'Admin'>('User');
 
   const tabs = [
     { label: 'Overview (SIH)', route: '/about' },
@@ -18,14 +17,20 @@ export default function TopNavigation() {
     <View style={styles.container}>
       <View style={styles.pillContainer}>
         {/* Left: Logo and Title */}
-        <View style={styles.leftSection}>
+        <Pressable 
+          style={styles.leftSection}
+          onPress={() => router.push('/about')}
+        >
           <Image 
             source={require('../assets/images/doomday-logo.png')} 
             style={styles.logo} 
             resizeMode="contain"
           />
-          <Text style={styles.title}>VeriTrace AI</Text>
-        </View>
+          <View>
+            <Text style={styles.title}>VeriTrace AI</Text>
+            <Text style={styles.titleSub}>SIH 2026 EDITION</Text>
+          </View>
+        </Pressable>
 
         {/* Middle: Navigation Tabs */}
         {Platform.OS === 'web' && (
@@ -47,22 +52,23 @@ export default function TopNavigation() {
           </View>
         )}
 
-        {/* Right: User / Admin Toggle */}
+        {/* Right: Status Pill & SaaS Launch CTA */}
         <View style={styles.rightSection}>
-          <View style={styles.toggleContainer}>
-            <Pressable 
-              style={[styles.toggleButton, role === 'User' && styles.toggleActive]}
-              onPress={() => setRole('User')}
-            >
-              <Text style={[styles.toggleText, role === 'User' && styles.toggleActiveText]}>User</Text>
-            </Pressable>
-            <Pressable 
-              style={[styles.toggleButton, role === 'Admin' && styles.toggleActive]}
-              onPress={() => setRole('Admin')}
-            >
-              <Text style={[styles.toggleText, role === 'Admin' && styles.toggleActiveText]}>Admin</Text>
-            </Pressable>
+          <View style={styles.statusPill}>
+            <View style={styles.statusDot} />
+            <Text style={styles.statusText}>100% Offline</Text>
           </View>
+
+          <Pressable 
+            style={styles.launchButton}
+            onPress={() => router.push('/capture')}
+            accessibilityRole="button"
+            accessibilityLabel="Launch Live Field Test"
+          >
+            <Text style={styles.launchButtonText}>
+              {Platform.OS === 'web' ? 'Launch Live Test →' : 'Test →'}
+            </Text>
+          </Pressable>
         </View>
       </View>
     </View>
@@ -135,31 +141,50 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
   },
-  toggleContainer: {
+  titleSub: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FF7F50',
+    letterSpacing: 0.5,
+  },
+  statusPill: {
     flexDirection: 'row',
-    backgroundColor: '#FFF5F0', // Very light orange background
-    borderRadius: 30,
-    padding: 4,
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 6,
   },
-  toggleButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 25,
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
   },
-  toggleActive: {
+  statusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  launchButton: {
     backgroundColor: '#FF7F50',
+    borderRadius: 25,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     shadowColor: '#FF7F50',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  toggleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  toggleActiveText: {
+  launchButtonText: {
     color: '#FFFFFF',
-  }
+    fontSize: 13,
+    fontWeight: '700',
+  },
 });
