@@ -17,6 +17,9 @@ const SETTING_AUTH_TOKEN_KEY = 'auth_token';
  * - iOS Simulator / Web / Desktop: http://localhost:8000
  */
 export function getDefaultBackendUrl(): string {
+  if (process.env.EXPO_PUBLIC_BACKEND_URL) {
+    return process.env.EXPO_PUBLIC_BACKEND_URL.trim().replace(/\/+$/, '');
+  }
   if (Platform.OS === 'android') {
     return 'http://10.0.2.2:8000';
   }

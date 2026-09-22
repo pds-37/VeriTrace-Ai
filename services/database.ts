@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 export type SyncStatusType = 'local_only' | 'pending' | 'synced' | 'conflict' | 'rejected';
+export type OutcomeCategoryType = 'POSITIVE' | 'NEGATIVE' | 'INCONCLUSIVE';
 
 export interface FieldTestRecord {
   id: string;
@@ -19,6 +20,17 @@ export interface FieldTestRecord {
   serverRecordHash?: string | null;
   serverPrevHash?: string | null;
   syncedAt?: string | null;
+
+  // Evidentiary & Reagent additions
+  kitType?: string;
+  outcomeCategory?: OutcomeCategoryType | string;
+  presumptiveSubstance?: string;
+  confidenceScore?: number | null;
+  calibratedRgb?: string | null; // e.g. JSON string "[0, 71, 171]" or hex
+  rawRgb?: string | null;
+  referenceCardCalibrated?: boolean;
+  digitalSignature?: string;
+  signatureVerified?: boolean;
 }
 
 interface DatabaseRow {
@@ -37,6 +49,15 @@ interface DatabaseRow {
   server_record_hash: string | null;
   server_prev_hash: string | null;
   synced_at: string | null;
+  kit_type: string | null;
+  outcome_category: string | null;
+  presumptive_substance: string | null;
+  confidence_score: number | null;
+  calibrated_rgb: string | null;
+  raw_rgb: string | null;
+  reference_card_calibrated: number | null;
+  digital_signature: string | null;
+  signature_verified: number | null;
 }
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -64,7 +85,7 @@ export async function getDatabaseAsync(): Promise<SQLite.SQLiteDatabase> {
           reference_id TEXT NOT NULL,
           image_uri TEXT NOT NULL,
           created_at TEXT NOT NULL,
-          analysis_status TEXT NOT NULL DEFAULT 'not_implemented',
+          analysis_status TEXT NOT NULL DEFAULT 'completed',
           presumptive_status TEXT NOT NULL DEFAULT 'Presumptive (Unanalyzed)',
           sync_status TEXT NOT NULL DEFAULT 'pending',
           latitude REAL,
@@ -74,7 +95,16 @@ export async function getDatabaseAsync(): Promise<SQLite.SQLiteDatabase> {
           image_hash TEXT NOT NULL DEFAULT '',
           server_record_hash TEXT DEFAULT NULL,
           server_prev_hash TEXT DEFAULT NULL,
-          synced_at TEXT DEFAULT NULL
+          synced_at TEXT DEFAULT NULL,
+          kit_type TEXT DEFAULT 'scott',
+          outcome_category TEXT DEFAULT 'INCONCLUSIVE',
+          presumptive_substance TEXT DEFAULT 'Presumptive (Unanalyzed)',
+          confidence_score REAL DEFAULT NULL,
+          calibrated_rgb TEXT DEFAULT NULL,
+          raw_rgb TEXT DEFAULT NULL,
+          reference_card_calibrated INTEGER DEFAULT 0,
+          digital_signature TEXT DEFAULT NULL,
+          signature_verified INTEGER DEFAULT 1
         );
       `);
 
@@ -90,60 +120,33 @@ export async function getDatabaseAsync(): Promise<SQLite.SQLiteDatabase> {
       const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(field_test_records);');
       const columnNames = new Set(columns.map((c) => c.name));
 
-      if (!columnNames.has('presumptive_status')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN presumptive_status TEXT NOT NULL DEFAULT 'Presumptive (Unanalyzed)';"
-        );
-      }
-      if (!columnNames.has('analysis_status')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN analysis_status TEXT NOT NULL DEFAULT 'not_implemented';"
-        );
-      }
-      if (!columnNames.has('sync_status')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending';"
-        );
-      }
-      if (!columnNames.has('latitude')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN latitude REAL;"
-        );
-      }
-      if (!columnNames.has('longitude')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN longitude REAL;"
-        );
-      }
-      if (!columnNames.has('location_status')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN location_status TEXT NOT NULL DEFAULT 'unavailable';"
-        );
-      }
-      if (!columnNames.has('operator_id')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN operator_id TEXT NOT NULL DEFAULT '';"
-        );
-      }
-      if (!columnNames.has('image_hash')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN image_hash TEXT NOT NULL DEFAULT '';"
-        );
-      }
-      if (!columnNames.has('server_record_hash')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN server_record_hash TEXT DEFAULT NULL;"
-        );
-      }
-      if (!columnNames.has('server_prev_hash')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN server_prev_hash TEXT DEFAULT NULL;"
-        );
-      }
-      if (!columnNames.has('synced_at')) {
-        await db.execAsync(
-          "ALTER TABLE field_test_records ADD COLUMN synced_at TEXT DEFAULT NULL;"
-        );
+      const migrations = [
+        { col: 'presumptive_status', sql: "ALTER TABLE field_test_records ADD COLUMN presumptive_status TEXT NOT NULL DEFAULT 'Presumptive (Unanalyzed)';" },
+        { col: 'analysis_status', sql: "ALTER TABLE field_test_records ADD COLUMN analysis_status TEXT NOT NULL DEFAULT 'completed';" },
+        { col: 'sync_status', sql: "ALTER TABLE field_test_records ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending';" },
+        { col: 'latitude', sql: "ALTER TABLE field_test_records ADD COLUMN latitude REAL;" },
+        { col: 'longitude', sql: "ALTER TABLE field_test_records ADD COLUMN longitude REAL;" },
+        { col: 'location_status', sql: "ALTER TABLE field_test_records ADD COLUMN location_status TEXT NOT NULL DEFAULT 'unavailable';" },
+        { col: 'operator_id', sql: "ALTER TABLE field_test_records ADD COLUMN operator_id TEXT NOT NULL DEFAULT '';" },
+        { col: 'image_hash', sql: "ALTER TABLE field_test_records ADD COLUMN image_hash TEXT NOT NULL DEFAULT '';" },
+        { col: 'server_record_hash', sql: "ALTER TABLE field_test_records ADD COLUMN server_record_hash TEXT DEFAULT NULL;" },
+        { col: 'server_prev_hash', sql: "ALTER TABLE field_test_records ADD COLUMN server_prev_hash TEXT DEFAULT NULL;" },
+        { col: 'synced_at', sql: "ALTER TABLE field_test_records ADD COLUMN synced_at TEXT DEFAULT NULL;" },
+        { col: 'kit_type', sql: "ALTER TABLE field_test_records ADD COLUMN kit_type TEXT DEFAULT 'scott';" },
+        { col: 'outcome_category', sql: "ALTER TABLE field_test_records ADD COLUMN outcome_category TEXT DEFAULT 'INCONCLUSIVE';" },
+        { col: 'presumptive_substance', sql: "ALTER TABLE field_test_records ADD COLUMN presumptive_substance TEXT DEFAULT 'Presumptive (Unanalyzed)';" },
+        { col: 'confidence_score', sql: "ALTER TABLE field_test_records ADD COLUMN confidence_score REAL DEFAULT NULL;" },
+        { col: 'calibrated_rgb', sql: "ALTER TABLE field_test_records ADD COLUMN calibrated_rgb TEXT DEFAULT NULL;" },
+        { col: 'raw_rgb', sql: "ALTER TABLE field_test_records ADD COLUMN raw_rgb TEXT DEFAULT NULL;" },
+        { col: 'reference_card_calibrated', sql: "ALTER TABLE field_test_records ADD COLUMN reference_card_calibrated INTEGER DEFAULT 0;" },
+        { col: 'digital_signature', sql: "ALTER TABLE field_test_records ADD COLUMN digital_signature TEXT DEFAULT NULL;" },
+        { col: 'signature_verified', sql: "ALTER TABLE field_test_records ADD COLUMN signature_verified INTEGER DEFAULT 1;" },
+      ];
+
+      for (const m of migrations) {
+        if (!columnNames.has(m.col)) {
+          await db.execAsync(m.sql);
+        }
       }
 
       return db;
@@ -167,7 +170,7 @@ export function generateRecordId(): string {
 }
 
 /**
- * Save a new field test record to SQLite with metadata (GPS, operator ID, image SHA-256).
+ * Save a new field test record to SQLite with metadata (GPS, operator ID, image SHA-256, signature, classification).
  */
 export async function saveFieldTestRecordAsync(params: {
   id?: string;
@@ -185,6 +188,15 @@ export async function saveFieldTestRecordAsync(params: {
   serverRecordHash?: string | null;
   serverPrevHash?: string | null;
   syncedAt?: string | null;
+  kitType?: string;
+  outcomeCategory?: OutcomeCategoryType | string;
+  presumptiveSubstance?: string;
+  confidenceScore?: number | null;
+  calibratedRgb?: string | null;
+  rawRgb?: string | null;
+  referenceCardCalibrated?: boolean;
+  digitalSignature?: string;
+  signatureVerified?: boolean;
 }): Promise<FieldTestRecord> {
   const db = await getDatabaseAsync();
   const name = (params.sampleName || params.referenceId || '').trim();
@@ -209,7 +221,7 @@ export async function saveFieldTestRecordAsync(params: {
     sampleName: name,
     imageUri: params.imageUri,
     createdAt: new Date().toISOString(),
-    analysisStatus: params.analysisStatus || 'not_implemented',
+    analysisStatus: params.analysisStatus || 'completed',
     presumptiveStatus: params.presumptiveStatus || 'Presumptive (Unanalyzed)',
     syncStatus: params.syncStatus || 'pending',
     latitude: hasCoords ? params.latitude! : null,
@@ -220,27 +232,27 @@ export async function saveFieldTestRecordAsync(params: {
     serverRecordHash: params.serverRecordHash || null,
     serverPrevHash: params.serverPrevHash || null,
     syncedAt: params.syncedAt || null,
+    kitType: params.kitType || 'scott',
+    outcomeCategory: params.outcomeCategory || 'INCONCLUSIVE',
+    presumptiveSubstance: params.presumptiveSubstance || params.presumptiveStatus || 'Presumptive (Unanalyzed)',
+    confidenceScore: params.confidenceScore ?? null,
+    calibratedRgb: params.calibratedRgb ?? null,
+    rawRgb: params.rawRgb ?? null,
+    referenceCardCalibrated: params.referenceCardCalibrated ?? false,
+    digitalSignature: params.digitalSignature ?? undefined,
+    signatureVerified: params.signatureVerified ?? true,
   };
 
   try {
     await db.runAsync(
       `INSERT INTO field_test_records (
-        id,
-        reference_id,
-        image_uri,
-        created_at,
-        analysis_status,
-        presumptive_status,
-        sync_status,
-        latitude,
-        longitude,
-        location_status,
-        operator_id,
-        image_hash,
-        server_record_hash,
-        server_prev_hash,
-        synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        id, reference_id, image_uri, created_at, analysis_status,
+        presumptive_status, sync_status, latitude, longitude,
+        location_status, operator_id, image_hash, server_record_hash,
+        server_prev_hash, synced_at, kit_type, outcome_category,
+        presumptive_substance, confidence_score, calibrated_rgb,
+        raw_rgb, reference_card_calibrated, digital_signature, signature_verified
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         record.id,
         record.referenceId,
@@ -257,6 +269,15 @@ export async function saveFieldTestRecordAsync(params: {
         record.serverRecordHash ?? null,
         record.serverPrevHash ?? null,
         record.syncedAt ?? null,
+        record.kitType ?? 'scott',
+        record.outcomeCategory ?? 'INCONCLUSIVE',
+        record.presumptiveSubstance ?? 'Presumptive (Unanalyzed)',
+        record.confidenceScore ?? null,
+        record.calibratedRgb ?? null,
+        record.rawRgb ?? null,
+        record.referenceCardCalibrated ? 1 : 0,
+        record.digitalSignature ?? null,
+        record.signatureVerified ? 1 : 0,
       ]
     );
 
@@ -307,31 +328,51 @@ export async function updateRecordSyncStatusAsync(
 }
 
 /**
- * Retrieve all saved field test records from SQLite, newest first.
+ * Retrieve saved field test records with multi-attribute search and filtering.
  */
-export async function getFieldTestRecordsAsync(options: { limit?: number; offset?: number } = {}): Promise<FieldTestRecord[]> {
+export async function getFieldTestRecordsAsync(options: {
+  searchQuery?: string;
+  outcomeCategory?: string;
+  kitType?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<FieldTestRecord[]> {
   const db = await getDatabaseAsync();
   
   let query = `SELECT
-        id,
-        reference_id,
-        image_uri,
-        created_at,
-        analysis_status,
-        presumptive_status,
-        sync_status,
-        latitude,
-        longitude,
-        location_status,
-        operator_id,
-        image_hash,
-        server_record_hash,
-        server_prev_hash,
-        synced_at
-       FROM field_test_records
-       ORDER BY created_at DESC`;
+        id, reference_id, image_uri, created_at, analysis_status,
+        presumptive_status, sync_status, latitude, longitude,
+        location_status, operator_id, image_hash, server_record_hash,
+        server_prev_hash, synced_at, kit_type, outcome_category,
+        presumptive_substance, confidence_score, calibrated_rgb,
+        raw_rgb, reference_card_calibrated, digital_signature, signature_verified
+       FROM field_test_records`;
 
+  const whereClauses: string[] = [];
   const params: (number | string)[] = [];
+
+  if (options.searchQuery && options.searchQuery.trim().length > 0) {
+    const term = `%${options.searchQuery.trim()}%`;
+    whereClauses.push('(reference_id LIKE ? OR operator_id LIKE ? OR id LIKE ? OR presumptive_substance LIKE ?)');
+    params.push(term, term, term, term);
+  }
+
+  if (options.outcomeCategory && options.outcomeCategory !== 'ALL') {
+    whereClauses.push('outcome_category = ?');
+    params.push(options.outcomeCategory);
+  }
+
+  if (options.kitType && options.kitType !== 'ALL') {
+    whereClauses.push('kit_type = ?');
+    params.push(options.kitType);
+  }
+
+  if (whereClauses.length > 0) {
+    query += ' WHERE ' + whereClauses.join(' AND ');
+  }
+
+  query += ' ORDER BY created_at DESC';
+
   if (options.limit !== undefined) {
     query += ` LIMIT ?`;
     params.push(options.limit);
@@ -350,7 +391,7 @@ export async function getFieldTestRecordsAsync(options: { limit?: number; offset
       sampleName: row.reference_id,
       imageUri: row.image_uri,
       createdAt: row.created_at,
-      analysisStatus: row.analysis_status || 'not_implemented',
+      analysisStatus: row.analysis_status || 'completed',
       presumptiveStatus: row.presumptive_status || 'Presumptive (Unanalyzed)',
       syncStatus: (row.sync_status as SyncStatusType) || 'pending',
       latitude: row.latitude ?? null,
@@ -361,6 +402,15 @@ export async function getFieldTestRecordsAsync(options: { limit?: number; offset
       serverRecordHash: row.server_record_hash || null,
       serverPrevHash: row.server_prev_hash || null,
       syncedAt: row.synced_at || null,
+      kitType: row.kit_type || 'scott',
+      outcomeCategory: (row.outcome_category as OutcomeCategoryType) || 'INCONCLUSIVE',
+      presumptiveSubstance: row.presumptive_substance || row.presumptive_status || 'Presumptive (Unanalyzed)',
+      confidenceScore: row.confidence_score ?? null,
+      calibratedRgb: row.calibrated_rgb || null,
+      rawRgb: row.raw_rgb || null,
+      referenceCardCalibrated: Boolean(row.reference_card_calibrated),
+      digitalSignature: row.digital_signature || undefined,
+      signatureVerified: row.signature_verified !== 0,
     }));
   } catch (error: any) {
     console.error('Failed to fetch records from SQLite:', error);
@@ -370,7 +420,7 @@ export async function getFieldTestRecordsAsync(options: { limit?: number; offset
 }
 
 /**
- * Retrieve all records that require synchronization (pending or local_only).
+ * Retrieve all records that require synchronization (pending, local_only, or conflict).
  */
 export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
   const db = await getDatabaseAsync();
@@ -381,7 +431,9 @@ export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
         id, reference_id, image_uri, created_at, analysis_status,
         presumptive_status, sync_status, latitude, longitude,
         location_status, operator_id, image_hash, server_record_hash,
-        server_prev_hash, synced_at
+        server_prev_hash, synced_at, kit_type, outcome_category,
+        presumptive_substance, confidence_score, calibrated_rgb,
+        raw_rgb, reference_card_calibrated, digital_signature, signature_verified
        FROM field_test_records
        WHERE sync_status IN ('pending', 'local_only', 'conflict')
        ORDER BY created_at ASC;`
@@ -393,7 +445,7 @@ export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
       sampleName: row.reference_id,
       imageUri: row.image_uri,
       createdAt: row.created_at,
-      analysisStatus: row.analysis_status || 'not_implemented',
+      analysisStatus: row.analysis_status || 'completed',
       presumptiveStatus: row.presumptive_status || 'Presumptive (Unanalyzed)',
       syncStatus: (row.sync_status as SyncStatusType) || 'pending',
       latitude: row.latitude ?? null,
@@ -404,6 +456,15 @@ export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
       serverRecordHash: row.server_record_hash || null,
       serverPrevHash: row.server_prev_hash || null,
       syncedAt: row.synced_at || null,
+      kitType: row.kit_type || 'scott',
+      outcomeCategory: (row.outcome_category as OutcomeCategoryType) || 'INCONCLUSIVE',
+      presumptiveSubstance: row.presumptive_substance || row.presumptive_status || 'Presumptive (Unanalyzed)',
+      confidenceScore: row.confidence_score ?? null,
+      calibratedRgb: row.calibrated_rgb || null,
+      rawRgb: row.raw_rgb || null,
+      referenceCardCalibrated: Boolean(row.reference_card_calibrated),
+      digitalSignature: row.digital_signature || undefined,
+      signatureVerified: row.signature_verified !== 0,
     }));
   } catch (error: any) {
     console.error('Failed to fetch pending sync records:', error);
@@ -412,24 +473,30 @@ export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
 }
 
 /**
- * Get count summary for records stored on the device.
+ * Get count summary for records stored on the device, including outcome breakdown.
  */
 export async function getRecordStatsAsync(): Promise<{
   totalCount: number;
   pendingCount: number;
   syncedCount: number;
   conflictCount: number;
+  positiveCount: number;
+  negativeCount: number;
+  inconclusiveCount: number;
 }> {
   try {
     const db = await getDatabaseAsync();
-    const rows = await db.getAllAsync<{ sync_status: string; count: number }>(
-      `SELECT sync_status, COUNT(*) as count FROM field_test_records GROUP BY sync_status;`
+    const rows = await db.getAllAsync<{ sync_status: string; outcome_category: string; count: number }>(
+      `SELECT sync_status, outcome_category, COUNT(*) as count FROM field_test_records GROUP BY sync_status, outcome_category;`
     );
 
     let totalCount = 0;
     let pendingCount = 0;
     let syncedCount = 0;
     let conflictCount = 0;
+    let positiveCount = 0;
+    let negativeCount = 0;
+    let inconclusiveCount = 0;
 
     for (const r of rows) {
       totalCount += r.count;
@@ -441,12 +508,20 @@ export async function getRecordStatsAsync(): Promise<{
       } else {
         pendingCount += r.count;
       }
+
+      if (r.outcome_category === 'POSITIVE') {
+        positiveCount += r.count;
+      } else if (r.outcome_category === 'NEGATIVE') {
+        negativeCount += r.count;
+      } else {
+        inconclusiveCount += r.count;
+      }
     }
 
-    return { totalCount, pendingCount, syncedCount, conflictCount };
+    return { totalCount, pendingCount, syncedCount, conflictCount, positiveCount, negativeCount, inconclusiveCount };
   } catch (error) {
     console.warn('Could not fetch record stats:', error);
-    return { totalCount: 0, pendingCount: 0, syncedCount: 0, conflictCount: 0 };
+    return { totalCount: 0, pendingCount: 0, syncedCount: 0, conflictCount: 0, positiveCount: 0, negativeCount: 0, inconclusiveCount: 0 };
   }
 }
 

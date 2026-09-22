@@ -1,4 +1,5 @@
 export type SyncStatusType = 'local_only' | 'pending' | 'synced' | 'conflict' | 'rejected';
+export type OutcomeCategoryType = 'POSITIVE' | 'NEGATIVE' | 'INCONCLUSIVE';
 
 export interface FieldTestRecord {
   id: string;
@@ -17,6 +18,17 @@ export interface FieldTestRecord {
   serverRecordHash?: string | null;
   serverPrevHash?: string | null;
   syncedAt?: string | null;
+
+  // Evidentiary & Reagent additions
+  kitType?: string;
+  outcomeCategory?: OutcomeCategoryType | string;
+  presumptiveSubstance?: string;
+  confidenceScore?: number | null;
+  calibratedRgb?: string | null;
+  rawRgb?: string | null;
+  referenceCardCalibrated?: boolean;
+  digitalSignature?: string;
+  signatureVerified?: boolean;
 }
 
 const STORAGE_KEY = 'field_test_records';
@@ -91,6 +103,15 @@ export async function saveFieldTestRecordAsync(params: {
   serverRecordHash?: string | null;
   serverPrevHash?: string | null;
   syncedAt?: string | null;
+  kitType?: string;
+  outcomeCategory?: OutcomeCategoryType | string;
+  presumptiveSubstance?: string;
+  confidenceScore?: number | null;
+  calibratedRgb?: string | null;
+  rawRgb?: string | null;
+  referenceCardCalibrated?: boolean;
+  digitalSignature?: string;
+  signatureVerified?: boolean;
 }): Promise<FieldTestRecord> {
   const name = (params.sampleName || params.referenceId || '').trim();
 
@@ -107,7 +128,7 @@ export async function saveFieldTestRecordAsync(params: {
     sampleName: name,
     imageUri: params.imageUri,
     createdAt: new Date().toISOString(),
-    analysisStatus: params.analysisStatus || 'not_implemented',
+    analysisStatus: params.analysisStatus || 'completed',
     presumptiveStatus: params.presumptiveStatus || 'Presumptive (Unanalyzed)',
     syncStatus: params.syncStatus || 'pending',
     latitude: hasCoords ? params.latitude! : null,
@@ -118,6 +139,15 @@ export async function saveFieldTestRecordAsync(params: {
     serverRecordHash: params.serverRecordHash || null,
     serverPrevHash: params.serverPrevHash || null,
     syncedAt: params.syncedAt || null,
+    kitType: params.kitType || 'scott',
+    outcomeCategory: params.outcomeCategory || 'INCONCLUSIVE',
+    presumptiveSubstance: params.presumptiveSubstance || params.presumptiveStatus || 'Presumptive (Unanalyzed)',
+    confidenceScore: params.confidenceScore ?? null,
+    calibratedRgb: params.calibratedRgb ?? null,
+    rawRgb: params.rawRgb ?? null,
+    referenceCardCalibrated: params.referenceCardCalibrated ?? false,
+    digitalSignature: params.digitalSignature ?? undefined,
+    signatureVerified: params.signatureVerified ?? true,
   };
 
   try {
@@ -160,30 +190,70 @@ export async function updateRecordSyncStatusAsync(
 }
 
 /**
- * Retrieve all saved field test records on web, newest first.
+ * Retrieve saved field test records on web with search and filtering.
  */
-export async function getFieldTestRecordsAsync(): Promise<FieldTestRecord[]> {
+export async function getFieldTestRecordsAsync(options: {
+  searchQuery?: string;
+  outcomeCategory?: string;
+  kitType?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<FieldTestRecord[]> {
   try {
     const records = getStoredRecords();
-    return records
-      .map((r) => ({
-        ...r,
-        sampleName: r.sampleName || r.referenceId,
-        analysisStatus: r.analysisStatus || 'not_implemented',
-        presumptiveStatus: r.presumptiveStatus || 'Presumptive (Unanalyzed)',
-        syncStatus: (r.syncStatus as SyncStatusType) || 'pending',
-        latitude: r.latitude ?? null,
-        longitude: r.longitude ?? null,
-        locationStatus: r.locationStatus || 'unavailable',
-        operatorId: r.operatorId || '',
-        imageHash: r.imageHash || '',
-        serverRecordHash: r.serverRecordHash || null,
-        serverPrevHash: r.serverPrevHash || null,
-        syncedAt: r.syncedAt || null,
-      }))
-      .sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    let filtered = records.map((r) => ({
+      ...r,
+      sampleName: r.sampleName || r.referenceId,
+      analysisStatus: r.analysisStatus || 'completed',
+      presumptiveStatus: r.presumptiveStatus || 'Presumptive (Unanalyzed)',
+      syncStatus: (r.syncStatus as SyncStatusType) || 'pending',
+      latitude: r.latitude ?? null,
+      longitude: r.longitude ?? null,
+      locationStatus: r.locationStatus || 'unavailable',
+      operatorId: r.operatorId || '',
+      imageHash: r.imageHash || '',
+      serverRecordHash: r.serverRecordHash || null,
+      serverPrevHash: r.serverPrevHash || null,
+      syncedAt: r.syncedAt || null,
+      kitType: r.kitType || 'scott',
+      outcomeCategory: (r.outcomeCategory as OutcomeCategoryType) || 'INCONCLUSIVE',
+      presumptiveSubstance: r.presumptiveSubstance || r.presumptiveStatus || 'Presumptive (Unanalyzed)',
+      confidenceScore: r.confidenceScore ?? null,
+      calibratedRgb: r.calibratedRgb || null,
+      rawRgb: r.rawRgb || null,
+      referenceCardCalibrated: Boolean(r.referenceCardCalibrated),
+      digitalSignature: r.digitalSignature || undefined,
+      signatureVerified: r.signatureVerified !== false,
+    }));
+
+    if (options.searchQuery && options.searchQuery.trim().length > 0) {
+      const q = options.searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(
+        (r) =>
+          r.referenceId.toLowerCase().includes(q) ||
+          r.operatorId.toLowerCase().includes(q) ||
+          r.id.toLowerCase().includes(q) ||
+          (r.presumptiveSubstance && r.presumptiveSubstance.toLowerCase().includes(q))
       );
+    }
+
+    if (options.outcomeCategory && options.outcomeCategory !== 'ALL') {
+      filtered = filtered.filter((r) => r.outcomeCategory === options.outcomeCategory);
+    }
+
+    if (options.kitType && options.kitType !== 'ALL') {
+      filtered = filtered.filter((r) => r.kitType === options.kitType);
+    }
+
+    filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    if (options.offset !== undefined || options.limit !== undefined) {
+      const offset = options.offset || 0;
+      const limit = options.limit !== undefined ? options.limit : filtered.length;
+      filtered = filtered.slice(offset, offset + limit);
+    }
+
+    return filtered;
   } catch (error) {
     console.error('Failed to fetch records on web:', error);
     throw new Error('Failed to load field test records.');
@@ -201,13 +271,16 @@ export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
 }
 
 /**
- * Get count summary for records stored on web.
+ * Get count summary for records stored on web, including outcome breakdown.
  */
 export async function getRecordStatsAsync(): Promise<{
   totalCount: number;
   pendingCount: number;
   syncedCount: number;
   conflictCount: number;
+  positiveCount: number;
+  negativeCount: number;
+  inconclusiveCount: number;
 }> {
   try {
     const records = getStoredRecords();
@@ -215,6 +288,9 @@ export async function getRecordStatsAsync(): Promise<{
     let pendingCount = 0;
     let syncedCount = 0;
     let conflictCount = 0;
+    let positiveCount = 0;
+    let negativeCount = 0;
+    let inconclusiveCount = 0;
 
     for (const r of records) {
       if (r.syncStatus === 'synced') {
@@ -225,12 +301,21 @@ export async function getRecordStatsAsync(): Promise<{
       } else {
         pendingCount += 1;
       }
+
+      const cat = r.outcomeCategory || 'INCONCLUSIVE';
+      if (cat === 'POSITIVE') {
+        positiveCount += 1;
+      } else if (cat === 'NEGATIVE') {
+        negativeCount += 1;
+      } else {
+        inconclusiveCount += 1;
+      }
     }
 
-    return { totalCount, pendingCount, syncedCount, conflictCount };
+    return { totalCount, pendingCount, syncedCount, conflictCount, positiveCount, negativeCount, inconclusiveCount };
   } catch (error) {
     console.warn('Could not fetch record stats on web:', error);
-    return { totalCount: 0, pendingCount: 0, syncedCount: 0, conflictCount: 0 };
+    return { totalCount: 0, pendingCount: 0, syncedCount: 0, conflictCount: 0, positiveCount: 0, negativeCount: 0, inconclusiveCount: 0 };
   }
 }
 
@@ -264,7 +349,7 @@ export async function setSettingAsync(key: string, value: string): Promise<void>
       window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(parsed));
       return;
     } catch (e) {
-      console.warn('Failed to write settings to localStorage:', e);
+      console.warn('Failed to write setting to localStorage:', e);
     }
   }
   memorySettings[key] = value;

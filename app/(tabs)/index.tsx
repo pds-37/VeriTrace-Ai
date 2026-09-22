@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
-  Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,19 +11,27 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getRecordStatsAsync } from '@/services/database';
+import { STANDARD_REFERENCE_PATCHES } from '@/services/colorCalibration';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [isCardModalVisible, setIsCardModalVisible] = useState(false);
   const [stats, setStats] = useState<{
     totalCount: number;
     pendingCount: number;
     syncedCount: number;
     conflictCount: number;
+    positiveCount: number;
+    negativeCount: number;
+    inconclusiveCount: number;
   }>({
     totalCount: 0,
     pendingCount: 0,
     syncedCount: 0,
     conflictCount: 0,
+    positiveCount: 0,
+    negativeCount: 0,
+    inconclusiveCount: 0,
   });
 
   const loadStats = useCallback(async () => {
@@ -46,416 +54,504 @@ export default function HomeScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#F5F7FA" />
 
       <ScrollView contentContainerStyle={styles.container}>
-
-        {/* SIH 2026 Judge Banner */}
-        <Pressable
-          style={styles.sihBanner}
-          onPress={() => router.push('/about')}
-          accessibilityRole="button"
-          accessibilityLabel="View Smart India Hackathon Presentation"
-        >
-          <View style={styles.sihBannerHeader}>
-            <View style={styles.sihBannerBadge}>
-              <Text style={styles.sihBannerBadgeText}>🏆 SIH 2026 EVALUATION</Text>
-            </View>
-            <Text style={styles.sihBannerArrow}>Explore Pitch →</Text>
-          </View>
-          <Text style={styles.sihBannerTitle}>VeriTrace AI: Project Overview & Architecture</Text>
-          <Text style={styles.sihBannerSub}>
-            Complete technical defense, 7-stage edge CV/AI telemetry breakdown, OOD safety benchmarks, and live demo protocol.
-          </Text>
-        </Pressable>
-
-        {/* Welcome */}
+        {/* Top Header Card */}
         <View style={styles.welcome}>
-          <Text style={styles.eyebrow}>FIELD OPERATIONS</Text>
-          <Text style={styles.heading}>Ready to begin?</Text>
+          <Text style={styles.eyebrow}>FIELD DRUG-TESTING COMPANION</Text>
+          <Text style={styles.heading}>Objective Colorimetric Evidence</Text>
           <Text style={styles.description}>
-            Capture a field test and create a secure digital record with Hash-Linked Chain of Custody.
+            Capture field-test reactions with in-frame reference colour card lighting calibration, automated classification, and tamper-evident cryptographic digital signatures.
           </Text>
 
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => router.push('/capture')}
-            accessibilityRole="button"
-            accessibilityLabel="Start New Test"
-          >
-            <Text style={styles.buttonText}>＋  Start New Test</Text>
-          </Pressable>
+          <View style={styles.welcomeButtonsRow}>
+            <Pressable
+              style={styles.primaryButton}
+              onPress={() => router.push('/capture')}
+              accessibilityRole="button"
+              accessibilityLabel="Start New Test"
+            >
+              <Text style={styles.buttonText}>＋  Start New Test</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.secondaryHeaderButton}
+              onPress={() => setIsCardModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Show Reference Colour Card"
+            >
+              <Text style={styles.secondaryHeaderButtonText}>📄 Show Reference Card</Text>
+            </Pressable>
+          </View>
         </View>
 
-        {/* Summary cards */}
-        <Text style={styles.sectionTitle}>Your records</Text>
+        {/* Outcome Breakdown Statistics */}
+        <Text style={styles.sectionTitle}>Field Test Outbreak Telemetry</Text>
 
         <View style={styles.statsRow}>
           <Pressable
             style={styles.statCard}
             onPress={() => router.push('/records')}
-            accessibilityRole="button"
-            accessibilityLabel="View saved records"
           >
-            <Text style={styles.statLabel}>Saved records</Text>
+            <Text style={styles.statLabel}>Total Tests</Text>
             <Text style={styles.statNumber}>{stats.totalCount}</Text>
-            <Text style={styles.statHint}>Stored on device</Text>
+            <Text style={styles.statHint}>Logged on device</Text>
           </Pressable>
 
           <Pressable
-            style={styles.statCard}
+            style={[styles.statCard, { borderTopColor: '#DC2626', borderTopWidth: 3 }]}
             onPress={() => router.push('/records')}
-            accessibilityRole="button"
-            accessibilityLabel="View synced records"
           >
-            <Text style={styles.statLabel}>Synced Chain</Text>
-            <Text style={[styles.statNumber, { color: '#166534' }]}>{stats.syncedCount}</Text>
-            <Text style={styles.statHint}>Cryptographically linked</Text>
+            <Text style={styles.statLabel}>Positive</Text>
+            <Text style={[styles.statNumber, { color: '#DC2626' }]}>{stats.positiveCount}</Text>
+            <Text style={styles.statHint}>Presumptive matches</Text>
           </Pressable>
 
           <Pressable
-            style={styles.statCard}
+            style={[styles.statCard, { borderTopColor: '#059669', borderTopWidth: 3 }]}
             onPress={() => router.push('/records')}
-            accessibilityRole="button"
-            accessibilityLabel="View pending sync records"
           >
-            <Text style={styles.statLabel}>Pending</Text>
-            <Text style={[styles.statNumber, { color: stats.pendingCount > 0 ? '#B45309' : '#64748B' }]}>
-              {stats.pendingCount}
-            </Text>
-            <Text style={styles.statHint}>{stats.pendingCount > 0 ? 'Needs sync' : 'All synced'}</Text>
+            <Text style={styles.statLabel}>Negative</Text>
+            <Text style={[styles.statNumber, { color: '#059669' }]}>{stats.negativeCount}</Text>
+            <Text style={styles.statHint}>Non-reactive</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.statCard, { borderTopColor: '#D97706', borderTopWidth: 3 }]}
+            onPress={() => router.push('/records')}
+          >
+            <Text style={styles.statLabel}>Inconclusive</Text>
+            <Text style={[styles.statNumber, { color: '#D97706' }]}>{stats.inconclusiveCount}</Text>
+            <Text style={styles.statHint}>Lighting / Ambiguous</Text>
           </Pressable>
         </View>
 
-        {/* Device status */}
-        <Text style={styles.sectionTitle}>Device status</Text>
+        {/* Evidentiary Integrity Status */}
+        <Text style={styles.sectionTitle}>Evidentiary Chain of Custody</Text>
 
-        <View style={styles.listItem}>
+        <Pressable
+          style={styles.listItem}
+          onPress={() => router.push('/records')}
+        >
           <View style={styles.itemIcon}>
-            <Text style={styles.iconText}>✓</Text>
+            <Text style={styles.iconText}>🛡️</Text>
           </View>
           <View style={styles.itemContent}>
-            <Text style={styles.itemTitle}>Offline storage</Text>
+            <Text style={styles.itemTitle}>Cryptographic Evidence Signing</Text>
             <Text style={styles.itemDescription}>
-              Offline-ready SQLite record keeping
+              HMAC-SHA256 digital signatures with image hash binding
             </Text>
           </View>
           <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>Local</Text>
+            <Text style={styles.statusText}>Active</Text>
           </View>
-        </View>
-
-        {/* Developer / Dataset Mode */}
-        <Text style={styles.sectionTitle}>Model Engineering</Text>
-
-        <Pressable
-          style={styles.devCard}
-          onPress={() => router.push('/dataset-collect')}
-          accessibilityRole="button"
-          accessibilityLabel="Open Dataset Collection Mode"
-        >
-          <View style={styles.devCardHeader}>
-            <Text style={styles.devCardBadge}>DEV PROTOYPE</Text>
-            <Text style={styles.devCardArrow}>→</Text>
-          </View>
-          <Text style={styles.devCardTitle}>Camera-Domain Dataset Collection</Text>
-          <Text style={styles.devCardDescription}>
-            Capture and label genuine test-cassette & non-test images for camera-domain AI training.
-          </Text>
         </Pressable>
 
-        {/* Notice */}
+        <Pressable
+          style={styles.listItem}
+          onPress={() => router.push('/records')}
+        >
+          <View style={styles.itemIcon}>
+            <Text style={styles.iconText}>🔗</Text>
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Hash-Linked Audit Chain</Text>
+            <Text style={styles.itemDescription}>
+              {stats.syncedCount} records cryptographically synchronized to server
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: stats.pendingCount > 0 ? '#FEF3C7' : '#DCFCE7' }]}>
+            <Text style={[styles.statusText, { color: stats.pendingCount > 0 ? '#B45309' : '#166534' }]}>
+              {stats.pendingCount > 0 ? `${stats.pendingCount} Pending` : 'Synced'}
+            </Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          style={styles.listItem}
+          onPress={() => setIsCardModalVisible(true)}
+        >
+          <View style={styles.itemIcon}>
+            <Text style={styles.iconText}>🎯</Text>
+          </View>
+          <View style={styles.itemContent}>
+            <Text style={styles.itemTitle}>Optical Lighting Calibration</Text>
+            <Text style={styles.itemDescription}>
+              18% Neutral Gray card dynamic gain compensation
+            </Text>
+          </View>
+          <View style={styles.statusBadge}>
+            <Text style={styles.statusText}>Ready</Text>
+          </View>
+        </Pressable>
+
+        {/* Regulatory Mandated Notice */}
         <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>Important</Text>
+          <Text style={styles.noticeTitle}>Mandatory Presumptive Field-Test Notice</Text>
           <Text style={styles.noticeText}>
-            Field test results are presumptive only and do not replace
-            laboratory confirmation.
+            The output of this application is a presumptive field-test result and a supporting digital record. It does not replace laboratory confirmatory testing (GC-MS / HPLC).
           </Text>
         </View>
 
         <Text style={styles.footer}>
-          Field Test Companion · Secure field records
+          Field Test Companion · Evidentiary Documentation Standard
         </Text>
       </ScrollView>
+
+      {/* REFERENCE COLOUR CARD MODAL */}
+      <Modal
+        visible={isCardModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsCardModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Standard Reference Colour Card</Text>
+              <Pressable onPress={() => setIsCardModalVisible(false)} style={styles.modalCloseButton}>
+                <Text style={styles.modalCloseButtonText}>✕</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.modalSub}>
+              Display this standard card on a second phone or print it out to place in-frame with your field test kit:
+            </Text>
+
+            <View style={styles.referenceCardRender}>
+              <View style={styles.referenceCardBrandRow}>
+                <Text style={styles.referenceCardBrand}>VERITRACE CALIBRATOR</Text>
+                <Text style={styles.referenceCardVersion}>18% NEUTRAL GRAY / ISO-17025</Text>
+              </View>
+
+              <View style={styles.patchesGrid}>
+                {STANDARD_REFERENCE_PATCHES.map((patch, idx) => (
+                  <View key={idx} style={styles.patchItem}>
+                    <View style={[styles.patchColorBox, { backgroundColor: patch.nominalHex }]} />
+                    <Text style={styles.patchName}>{patch.name}</Text>
+                    <Text style={styles.patchHex}>{patch.nominalHex}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.referenceCardFooter}>
+                <Text style={styles.referenceCardFootText}>
+                  Align card within the "Reference Colour Card" box in the camera viewfinder.
+                </Text>
+              </View>
+            </View>
+
+            <Pressable
+              style={styles.primaryModalButton}
+              onPress={() => {
+                setIsCardModalVisible(false);
+                router.push('/capture');
+              }}
+            >
+              <Text style={styles.buttonText}>Open Camera Viewfinder →</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  container: {
-    padding: 20,
-    paddingBottom: 36,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  logoContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    shadowColor: '#0F2942',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  logoImage: {
-    width: 40,
-    height: 40,
-  },
-  headerText: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  appName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#142536',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#64748B',
-    marginTop: 3,
-  },
-  sihBanner: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#334155',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  sihBannerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  sihBannerBadge: {
-    backgroundColor: '#FF7F50',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  sihBannerBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  sihBannerArrow: {
-    color: '#38BDF8',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  sihBannerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 6,
-  },
-  sihBannerSub: {
-    color: '#94A3B8',
-    fontSize: 13,
-    lineHeight: 19,
-  },
+  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { padding: 18, paddingBottom: 40 },
+
   welcome: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
     borderRadius: 14,
     padding: 20,
-    marginBottom: 28,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   eyebrow: {
-    color: '#557086',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 10,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1D5D8F',
+    letterSpacing: 0.8,
+    marginBottom: 6,
   },
   heading: {
-    color: '#142536',
-    fontSize: 25,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
   },
   description: {
-    color: '#64748B',
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 9,
-    marginBottom: 20,
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  welcomeButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
   primaryButton: {
     backgroundColor: '#1D5D8F',
-    paddingVertical: 15,
-    borderRadius: 9,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  sectionTitle: {
-    color: '#142536',
-    fontSize: 17,
+    fontSize: 13,
     fontWeight: '700',
-    marginBottom: 13,
   },
+  secondaryHeaderButton: {
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryHeaderButtonText: {
+    color: '#1E293B',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.3,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+
   statsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 28,
+    gap: 8,
+    marginBottom: 20,
   },
   statCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 15,
+    alignItems: 'center',
   },
   statLabel: {
+    fontSize: 10,
+    fontWeight: '700',
     color: '#64748B',
-    fontSize: 12,
+    marginBottom: 4,
   },
   statNumber: {
-    color: '#142536',
-    fontSize: 27,
-    fontWeight: '700',
-    marginTop: 8,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 2,
   },
   statHint: {
+    fontSize: 9,
     color: '#94A3B8',
-    fontSize: 11,
-    marginTop: 5,
+    textAlign: 'center',
   },
+
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 12,
     padding: 14,
     marginBottom: 10,
   },
   itemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 9,
-    backgroundColor: '#EDF3F7',
-    alignItems: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   iconText: {
-    color: '#1D5D8F',
-    fontSize: 21,
-    fontWeight: '700',
+    fontSize: 18,
   },
   itemContent: {
     flex: 1,
-    marginLeft: 12,
   },
   itemTitle: {
-    color: '#142536',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 2,
   },
   itemDescription: {
+    fontSize: 11,
     color: '#64748B',
-    fontSize: 12,
-    marginTop: 4,
+    lineHeight: 15,
   },
   statusBadge: {
-    backgroundColor: '#E8F2EB',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
   },
   statusText: {
-    color: '#286344',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#475569',
   },
-  devCard: {
-    backgroundColor: '#F0FDFA',
-    borderWidth: 1.5,
-    borderColor: '#99F6E4',
-    borderRadius: 12,
-    padding: 16,
+
+  notice: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderLeftWidth: 4,
+    borderLeftColor: '#D97706',
+    marginTop: 8,
     marginBottom: 20,
   },
-  devCardHeader: {
+  noticeTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  noticeText: {
+    fontSize: 11,
+    color: '#78350F',
+    lineHeight: 16,
+  },
+
+  footer: {
+    fontSize: 11,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+
+  // MODAL STYLES
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 520,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 20,
+  },
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-  devCardBadge: {
-    fontSize: 10,
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  modalCloseButton: {
+    padding: 6,
+  },
+  modalCloseButtonText: {
+    fontSize: 18,
+    color: '#64748B',
     fontWeight: '700',
-    letterSpacing: 0.8,
-    color: '#0F766E',
-    backgroundColor: '#CCFBF1',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  referenceCardRender: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#334155',
+    padding: 12,
+    marginBottom: 16,
+  },
+  referenceCardBrandRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  referenceCardBrand: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.6,
+  },
+  referenceCardVersion: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  patchesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  patchItem: {
+    width: '30%',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  patchColorBox: {
+    width: '100%',
+    height: 48,
     borderRadius: 4,
-  },
-  devCardArrow: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0D9488',
-  },
-  devCardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#115E59',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
     marginBottom: 4,
   },
-  devCardDescription: {
-    fontSize: 12,
-    color: '#0F766E',
-    lineHeight: 18,
-  },
-  notice: {
-    backgroundColor: '#FFF9E9',
-    borderColor: '#F1D99A',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 14,
-    marginTop: 18,
-  },
-  noticeTitle: {
-    color: '#785817',
-    fontSize: 13,
+  patchName: {
+    fontSize: 9,
     fontWeight: '700',
-    marginBottom: 5,
-  },
-  noticeText: {
-    color: '#785817',
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  footer: {
-    color: '#94A3B8',
-    fontSize: 11,
+    color: '#0F172A',
     textAlign: 'center',
-    marginTop: 24,
+  },
+  patchHex: {
+    fontSize: 8,
+    color: '#64748B',
+  },
+  referenceCardFooter: {
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 6,
+    marginTop: 4,
+  },
+  referenceCardFootText: {
+    fontSize: 9,
+    color: '#64748B',
+    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  primaryModalButton: {
+    backgroundColor: '#1D5D8F',
+    paddingVertical: 13,
+    borderRadius: 8,
+    alignItems: 'center',
   },
 });
