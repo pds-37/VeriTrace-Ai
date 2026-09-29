@@ -494,7 +494,7 @@ export default function AboutScreen() {
         {/* JUDGE Q&A / TECHNICAL FAQS */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionEyebrow}>EVALUATION & DEFENSE</Text>
-          <Text style={styles.sectionTitle}>Grand Jury Technical Questions & Answers</Text>
+          <Text style={styles.sectionTitle}>Under the Hood - Technical Q&A</Text>
         </View>
 
         <View style={styles.faqContainer}>
@@ -526,7 +526,7 @@ export default function AboutScreen() {
 
         {/* FOOTER */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>VeriTrace AI — SIH 2026 Edition | Problem Statement SIH26231</Text>
+          <Text style={styles.footerText}>VeriTrace AI - SIH 2026 Edition | Problem Statement SIH26231</Text>
           <Text style={styles.footerSubText}>Developed by Team DOOMDAY | Objective Optical Telemetry & Evidentiary Chain of Custody</Text>
         </View>
       </ScrollView>

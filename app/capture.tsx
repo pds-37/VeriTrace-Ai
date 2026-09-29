@@ -1086,7 +1086,7 @@ export default function CaptureScreen() {
               <View style={[styles.corner, styles.cornerBL, { borderColor: '#38BDF8' }]} />
               <View style={[styles.corner, styles.cornerBR, { borderColor: '#38BDF8' }]} />
               <View style={styles.reticleBadgeWrapper}>
-                <Text style={styles.reticleBadge01}>01 — REFERENCE CARD</Text>
+                <Text style={styles.reticleBadge01}>01 - REFERENCE CARD</Text>
                 <Text style={styles.reticleSubLabel}>Align In-Frame 18% Neutral Gray Card</Text>
               </View>
             </View>
@@ -1098,7 +1098,7 @@ export default function CaptureScreen() {
               <View style={[styles.corner, styles.cornerBL, { borderColor: '#10B981' }]} />
               <View style={[styles.corner, styles.cornerBR, { borderColor: '#10B981' }]} />
               <View style={styles.reticleBadgeWrapper}>
-                <Text style={styles.reticleBadge02}>02 — REACTION WINDOW</Text>
+                <Text style={styles.reticleBadge02}>02 - REACTION WINDOW</Text>
                 <Text style={styles.reticleSubLabel}>Align Chemical Reaction Spot</Text>
               </View>
             </View>
