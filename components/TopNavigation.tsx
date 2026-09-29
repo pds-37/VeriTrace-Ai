@@ -52,11 +52,11 @@ export default function TopNavigation() {
           </View>
         )}
 
-        {/* Right: Status Pill & SaaS Launch CTA */}
+        {/* Right: Status Pill & Field Launch CTA */}
         <View style={styles.rightSection}>
           <View style={styles.statusPill}>
             <View style={styles.statusDot} />
-            <Text style={styles.statusText}>100% Offline</Text>
+            <Text style={styles.statusText}>Offline-First Ready</Text>
           </View>
 
           <Pressable 
@@ -66,7 +66,7 @@ export default function TopNavigation() {
             accessibilityLabel="Launch Live Field Test"
           >
             <Text style={styles.launchButtonText}>
-              {Platform.OS === 'web' ? 'Launch Live Test →' : 'Test →'}
+              {Platform.OS === 'web' ? 'Launch Field Test →' : 'Field Test →'}
             </Text>
           </Pressable>
         </View>

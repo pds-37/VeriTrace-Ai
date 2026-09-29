@@ -45,10 +45,20 @@ import {
   type VerificationResult,
 } from '@/services/digitalSignature';
 
+const VideoElement = 'video' as any;
+
 export default function CaptureScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
+
+  // Web Camera Stream & Lifecycle
+  const webVideoRef = useRef<any>(null);
+  const mediaStreamRef = useRef<any>(null);
+  const [webCameraStatus, setWebCameraStatus] = useState<
+    'idle' | 'starting' | 'live' | 'permission_denied' | 'error' | 'not_supported'
+  >(Platform.OS === 'web' ? 'starting' : 'idle');
+  const [webCameraError, setWebCameraError] = useState<string>('');
 
   // Field Metadata
   const [selectedKitId, setSelectedKitId] = useState<string>('scott');
@@ -169,7 +179,105 @@ export default function CaptureScreen() {
     fetchLocationAsync();
   }, [fetchLocationAsync]);
 
+  /**
+   * Web Camera Stream Lifecycle Management
+   */
+  const stopWebCamera = useCallback(() => {
+    if (mediaStreamRef.current) {
+      try {
+        const stream = mediaStreamRef.current as MediaStream;
+        stream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {}
+        });
+      } catch {}
+      mediaStreamRef.current = null;
+    }
+    if (webVideoRef.current) {
+      try {
+        webVideoRef.current.srcObject = null;
+      } catch {}
+    }
+  }, []);
+
+  const attachVideoRef = useCallback((el: any) => {
+    webVideoRef.current = el;
+    if (el && mediaStreamRef.current) {
+      if (el.srcObject !== mediaStreamRef.current) {
+        el.srcObject = mediaStreamRef.current;
+      }
+      el.play().catch(() => {});
+    }
+  }, []);
+
+  const startWebCameraAsync = useCallback(async () => {
+    if (Platform.OS !== 'web') return;
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setWebCameraStatus('not_supported');
+      setWebCameraError('Web camera API is not supported in this browser environment.');
+      return;
+    }
+
+    stopWebCamera();
+    setWebCameraStatus('starting');
+    setWebCameraError('');
+
+    try {
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        });
+      } catch (firstErr) {
+        // Fallback to any default camera
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
+
+      mediaStreamRef.current = stream;
+      if (webVideoRef.current) {
+        webVideoRef.current.srcObject = stream;
+        webVideoRef.current.play().catch((playErr: any) => {
+          console.warn('Web video auto-play blocked/interrupted:', playErr);
+        });
+      }
+      setWebCameraStatus('live');
+    } catch (err: any) {
+      console.error('Web camera start error:', err);
+      if (err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError') {
+        setWebCameraStatus('permission_denied');
+        setWebCameraError(
+          'Camera access was blocked by browser permissions. Please allow camera access in your address bar.'
+        );
+      } else if (err?.name === 'NotFoundError' || err?.name === 'DevicesNotFoundError') {
+        setWebCameraStatus('error');
+        setWebCameraError('No camera sensor hardware detected on this machine.');
+      } else {
+        setWebCameraStatus('error');
+        setWebCameraError(err?.message || 'Unable to open camera stream.');
+      }
+    }
+  }, [stopWebCamera]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && !capturedImage) {
+      startWebCameraAsync();
+    }
+    return () => {
+      stopWebCamera();
+    };
+  }, [capturedImage, startWebCameraAsync, stopWebCamera]);
+
   const handleBack = () => {
+    stopWebCamera();
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -265,10 +373,64 @@ export default function CaptureScreen() {
   };
 
   /**
-   * Handle taking a live picture
+   * Handle taking a live picture (Web canvas snapshot or native CameraView)
    */
   const handleCapturePhoto = async () => {
-    if (!cameraRef.current || isCapturing) return;
+    if (isCapturing) return;
+
+    if (Platform.OS === 'web') {
+      if (webCameraStatus !== 'live' || !webVideoRef.current) {
+        Alert.alert(
+          'Camera Not Ready',
+          'Please ensure camera access is granted and the live stream is active before capturing.'
+        );
+        return;
+      }
+
+      try {
+        setIsCapturing(true);
+        const video = webVideoRef.current;
+        const vWidth = video.videoWidth || 1280;
+        const vHeight = video.videoHeight || 720;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = vWidth;
+        canvas.height = vHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Canvas 2D context is unavailable.');
+        }
+
+        ctx.drawImage(video, 0, 0, vWidth, vHeight);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        const base64Data = dataUrl.split(',')[1];
+
+        // Stop camera stream upon capturing
+        stopWebCamera();
+
+        const photo: CameraCapturedPicture = {
+          uri: dataUrl,
+          width: vWidth,
+          height: vHeight,
+          base64: base64Data,
+          format: 'jpg' as any,
+        };
+
+        setCapturedImage(photo);
+        await processImageCalibrationAndClassification(photo.uri, base64Data);
+      } catch (error: any) {
+        console.error('Failed to capture frame from web camera:', error);
+        Alert.alert(
+          'Capture Failed',
+          error?.message || 'Could not capture photo. Try using a preset or file upload.'
+        );
+      } finally {
+        setIsCapturing(false);
+      }
+      return;
+    }
+
+    if (!cameraRef.current) return;
 
     try {
       setIsCapturing(true);
@@ -294,6 +456,7 @@ export default function CaptureScreen() {
    * Handle selecting a demo benchmark preset
    */
   const handleSelectPreset = async (preset: DemoBenchmarkPreset) => {
+    stopWebCamera();
     setIsPresetModalVisible(false);
     setReferenceId(`SMP-${preset.kitId.toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`);
     setSelectedKitId(preset.kitId);
@@ -315,6 +478,7 @@ export default function CaptureScreen() {
    * Web file upload fallback
    */
   const handleWebFileUpload = (event: any) => {
+    stopWebCamera();
     const file = event.target?.files?.[0];
     if (!file) return;
 
@@ -344,6 +508,9 @@ export default function CaptureScreen() {
     setDigitalSignature('');
     setSignatureVerification(null);
     setTelemetryMode('');
+    if (Platform.OS === 'web') {
+      startWebCameraAsync();
+    }
   };
 
   /**
@@ -821,11 +988,48 @@ export default function CaptureScreen() {
         {/* Live Camera Viewfinder with Dual Calibration Overlay */}
         <View style={styles.cameraWrapper}>
           {Platform.OS === 'web' ? (
-            <View style={styles.webCameraFallback}>
-              <Text style={styles.webFallbackTitle}>📷 Camera Ready</Text>
-              <Text style={styles.webFallbackSub}>
-                Position the reagent test kit and reference colour card inside the alignment boxes.
-              </Text>
+            <View style={styles.webCameraContainer}>
+              {webCameraStatus === 'live' && (
+                <VideoElement
+                  ref={attachVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={styles.webVideoObject}
+                />
+              )}
+
+              {webCameraStatus === 'starting' && (
+                <View style={styles.webCameraStatusOverlay}>
+                  <ActivityIndicator size="large" color="#FF7F50" />
+                  <Text style={styles.webCameraStatusTitle}>Connecting Live Camera...</Text>
+                  <Text style={styles.webCameraStatusSubtitle}>Requesting browser camera stream</Text>
+                </View>
+              )}
+
+              {webCameraStatus === 'permission_denied' && (
+                <View style={styles.webCameraStatusOverlay}>
+                  <Text style={styles.webCameraStatusIcon}>🚫</Text>
+                  <Text style={styles.webCameraStatusTitle}>Camera Permission Blocked</Text>
+                  <Text style={styles.webCameraStatusSubtitle}>
+                    {webCameraError || 'Please allow camera access in your browser to enable real-time capture.'}
+                  </Text>
+                  <Pressable style={styles.webRetryBtn} onPress={startWebCameraAsync}>
+                    <Text style={styles.webRetryBtnText}>🔄 Retry Camera</Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {(webCameraStatus === 'error' || webCameraStatus === 'not_supported') && (
+                <View style={styles.webCameraStatusOverlay}>
+                  <Text style={styles.webCameraStatusIcon}>⚠️</Text>
+                  <Text style={styles.webCameraStatusTitle}>Camera Stream Unavailable</Text>
+                  <Text style={styles.webCameraStatusSubtitle}>{webCameraError}</Text>
+                  <Pressable style={styles.webRetryBtn} onPress={startWebCameraAsync}>
+                    <Text style={styles.webRetryBtnText}>🔄 Reconnect Camera</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
           ) : (
             <CameraView
@@ -841,13 +1045,50 @@ export default function CaptureScreen() {
 
           {/* DUAL-ZONE CALIBRATION OVERLAY */}
           <View style={styles.overlayContainer} pointerEvents="none">
+            {/* Viewfinder Top HUD Bar */}
+            <View style={styles.viewfinderTopHud}>
+              <View
+                style={[
+                  styles.liveStatusPill,
+                  webCameraStatus === 'live' || Platform.OS !== 'web'
+                    ? styles.liveStatusPillActive
+                    : styles.liveStatusPillInactive,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.liveStatusDot,
+                    webCameraStatus === 'live' || Platform.OS !== 'web'
+                      ? styles.liveStatusDotActive
+                      : styles.liveStatusDotInactive,
+                  ]}
+                />
+                <Text style={styles.liveStatusText}>
+                  {Platform.OS === 'web'
+                    ? webCameraStatus === 'live'
+                      ? 'LIVE CAMERA'
+                      : webCameraStatus === 'starting'
+                      ? 'STARTING...'
+                      : 'BLOCKED'
+                    : 'LIVE SENSOR'}
+                </Text>
+              </View>
+
+              <View style={styles.opticalHudPill}>
+                <Text style={styles.opticalHudText}>OPTICAL 1× • DUAL-ZONE</Text>
+              </View>
+            </View>
+
             {/* Box 1: Reference Colour Card Zone */}
             <View style={styles.referenceCardBox}>
-              <View style={[styles.corner, styles.cornerTL]} />
-              <View style={[styles.corner, styles.cornerTR]} />
-              <View style={[styles.corner, styles.cornerBL]} />
-              <View style={[styles.corner, styles.cornerBR]} />
-              <Text style={styles.guideBadgeText}>1. REFERENCE COLOUR CARD</Text>
+              <View style={[styles.corner, styles.cornerTL, { borderColor: '#38BDF8' }]} />
+              <View style={[styles.corner, styles.cornerTR, { borderColor: '#38BDF8' }]} />
+              <View style={[styles.corner, styles.cornerBL, { borderColor: '#38BDF8' }]} />
+              <View style={[styles.corner, styles.cornerBR, { borderColor: '#38BDF8' }]} />
+              <View style={styles.reticleBadgeWrapper}>
+                <Text style={styles.reticleBadge01}>01 — REFERENCE CARD</Text>
+                <Text style={styles.reticleSubLabel}>Align In-Frame 18% Neutral Gray Card</Text>
+              </View>
             </View>
 
             {/* Box 2: Test Reaction Window Zone */}
@@ -856,8 +1097,18 @@ export default function CaptureScreen() {
               <View style={[styles.corner, styles.cornerTR, { borderColor: '#10B981' }]} />
               <View style={[styles.corner, styles.cornerBL, { borderColor: '#10B981' }]} />
               <View style={[styles.corner, styles.cornerBR, { borderColor: '#10B981' }]} />
-              <Text style={[styles.guideBadgeText, { backgroundColor: 'rgba(6, 95, 70, 0.85)' }]}>
-                2. REAGENT REACTION WINDOW
+              <View style={styles.reticleBadgeWrapper}>
+                <Text style={styles.reticleBadge02}>02 — REACTION WINDOW</Text>
+                <Text style={styles.reticleSubLabel}>Align Chemical Reaction Spot</Text>
+              </View>
+            </View>
+
+            {/* Viewfinder Bottom Telemetry Footer */}
+            <View style={styles.viewfinderBottomHud}>
+              <Text style={styles.viewfinderTelemetryText}>
+                {Platform.OS === 'web' && webCameraStatus !== 'live'
+                  ? `CAMERA: ${webCameraStatus.toUpperCase()} | PRESETS READY`
+                  : '● OPTICAL SENSORS ACTIVE | RETICLE 01: READY | RETICLE 02: READY'}
               </Text>
             </View>
           </View>
@@ -866,16 +1117,29 @@ export default function CaptureScreen() {
         {/* Bottom Controls */}
         <View style={styles.controlsContainer}>
           <Pressable
-            style={[styles.captureButton, isCapturing && styles.captureButtonDisabled]}
+            style={[
+              styles.captureButton,
+              (isCapturing || (Platform.OS === 'web' && webCameraStatus !== 'live')) &&
+                styles.captureButtonDisabled,
+            ]}
             onPress={handleCapturePhoto}
-            disabled={isCapturing}
+            disabled={isCapturing || (Platform.OS === 'web' && webCameraStatus !== 'live')}
           >
             {isCapturing ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
                 <View style={styles.captureButtonInner} />
-                <Text style={styles.captureButtonLabel}>Capture Test Photo</Text>
+                <Text style={styles.captureButtonLabel}>
+                  {Platform.OS === 'web' && webCameraStatus === 'starting'
+                    ? 'Starting Camera...'
+                    : Platform.OS === 'web' && webCameraStatus === 'permission_denied'
+                    ? 'Camera Permission Blocked'
+                    : Platform.OS === 'web' &&
+                      (webCameraStatus === 'error' || webCameraStatus === 'not_supported')
+                    ? 'Camera Unavailable'
+                    : 'Capture Test Photo'}
+                </Text>
               </>
             )}
           </Pressable>
@@ -1094,73 +1358,219 @@ const styles = StyleSheet.create({
 
   cameraWrapper: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: '#000000',
-    minHeight: 280,
+    backgroundColor: '#0F172A',
+    minHeight: Platform.OS === 'web' ? 440 : 340,
     position: 'relative',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
   camera: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  webCameraFallback: {
+  webCameraContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#090D16',
+    overflow: 'hidden',
+  },
+  webVideoObject: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  } as any,
+  webCameraStatusOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#090D16',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
+    zIndex: 2,
   },
-  webFallbackTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 6 },
-  webFallbackSub: { color: '#94A3B8', fontSize: 12, textAlign: 'center', lineHeight: 18 },
-
+  webCameraStatusIcon: {
+    fontSize: 32,
+    marginBottom: 10,
+  },
+  webCameraStatusTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  webCameraStatusSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    maxWidth: 320,
+    marginBottom: 14,
+  },
+  webRetryBtn: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#475569',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  webRetryBtnText: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   overlayContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    zIndex: 10,
   },
-  referenceCardBox: {
-    width: '82%',
-    height: '38%',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
-    borderRadius: 8,
-    position: 'relative',
+  viewfinderTopHud: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 6,
   },
-  testReactionBox: {
-    width: '82%',
-    height: '42%',
-    borderWidth: 1.5,
-    borderColor: 'rgba(52, 211, 153, 0.8)',
-    borderRadius: 8,
-    position: 'relative',
+  liveStatusPill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    borderWidth: 1,
+    gap: 6,
   },
-  corner: { position: 'absolute', width: 16, height: 16, borderColor: '#FFFFFF' },
-  cornerTL: { top: -2, left: -2, borderTopWidth: 3, borderLeftWidth: 3 },
-  cornerTR: { top: -2, right: -2, borderTopWidth: 3, borderRightWidth: 3 },
-  cornerBL: { bottom: -2, left: -2, borderBottomWidth: 3, borderLeftWidth: 3 },
-  cornerBR: { bottom: -2, right: -2, borderBottomWidth: 3, borderRightWidth: 3 },
-  guideBadgeText: {
-    color: '#FFFFFF',
+  liveStatusPillActive: {
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+  },
+  liveStatusPillInactive: {
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+  },
+  liveStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  liveStatusDotActive: {
+    backgroundColor: '#10B981',
+  },
+  liveStatusDotInactive: {
+    backgroundColor: '#EF4444',
+  },
+  liveStatusText: {
     fontSize: 10,
     fontWeight: '800',
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  opticalHudPill: {
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  opticalHudText: {
+    color: '#94A3B8',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  referenceCardBox: {
+    width: '86%',
+    height: '34%',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.5)',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.04)',
+  },
+  testReactionBox: {
+    width: '86%',
+    height: '38%',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.6)',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.04)',
+  },
+  corner: { position: 'absolute', width: 14, height: 14 },
+  cornerTL: { top: -2, left: -2, borderTopWidth: 2.5, borderLeftWidth: 2.5 },
+  cornerTR: { top: -2, right: -2, borderTopWidth: 2.5, borderRightWidth: 2.5 },
+  cornerBL: { bottom: -2, left: -2, borderBottomWidth: 2.5, borderLeftWidth: 2.5 },
+  cornerBR: { bottom: -2, right: -2, borderBottomWidth: 2.5, borderRightWidth: 2.5 },
+  reticleBadgeWrapper: {
+    alignItems: 'center',
+    gap: 3,
+  },
+  reticleBadge01: {
+    color: '#38BDF8',
+    fontSize: 10,
+    fontWeight: '800',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
     overflow: 'hidden',
+  },
+  reticleBadge02: {
+    color: '#34D399',
+    fontSize: 10,
+    fontWeight: '800',
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    overflow: 'hidden',
+  },
+  reticleSubLabel: {
+    color: '#E2E8F0',
+    fontSize: 9,
+    fontWeight: '600',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  viewfinderBottomHud: {
+    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  viewfinderTelemetryText: {
+    color: '#CBD5E1',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 
   controlsContainer: { paddingTop: 10, gap: 8 },
