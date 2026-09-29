@@ -35,6 +35,8 @@ export interface CanonicalRecordPayload {
   confidenceScore: number | null;
   calibratedRgb: string | null;
   referenceCardCalibrated: boolean;
+  cielab?: string | null;
+  calibrationStatus?: string | null;
 }
 
 export interface VerificationResult {
@@ -71,6 +73,8 @@ export interface DigitalEvidenceCertificate {
     identifiedSubstance: string;
     confidence: number | null;
     calibratedRgb: string | null;
+    cielab?: string | null;
+    calibrationStatus?: string;
     referenceCardCalibrated: boolean;
   };
   regulatoryDisclaimer: string;
@@ -227,6 +231,8 @@ export async function generateEvidenceCertificateAsync(
       identifiedSubstance: payload.presumptiveSubstance,
       confidence: payload.confidenceScore,
       calibratedRgb: payload.calibratedRgb,
+      cielab: payload.cielab || null,
+      calibrationStatus: payload.calibrationStatus || (payload.referenceCardCalibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED'),
       referenceCardCalibrated: payload.referenceCardCalibrated,
     },
     regulatoryDisclaimer:

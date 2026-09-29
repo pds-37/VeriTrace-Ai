@@ -37,7 +37,7 @@ import {
   type CanonicalRecordPayload,
   type VerificationResult,
 } from '@/services/digitalSignature';
-import { REAGENT_KITS } from '@/services/reagentLibrary';
+import { REAGENT_KITS, toPresumptiveOutcome } from '@/services/reagentLibrary';
 
 export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {}) {
   const router = useRouter();
@@ -47,7 +47,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedOutcomeFilter, setSelectedOutcomeFilter] = useState<'ALL' | 'POSITIVE' | 'NEGATIVE' | 'INCONCLUSIVE'>('ALL');
+  const [selectedOutcomeFilter, setSelectedOutcomeFilter] = useState<'ALL' | 'PRESUMPTIVE POSITIVE' | 'PRESUMPTIVE NEGATIVE' | 'INCONCLUSIVE'>('ALL');
   const [selectedKitFilter, setSelectedKitFilter] = useState<string>('ALL');
 
   // Pagination state
@@ -275,6 +275,8 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
         confidenceScore: record.confidenceScore ?? null,
         calibratedRgb: record.calibratedRgb || null,
         referenceCardCalibrated: Boolean(record.referenceCardCalibrated),
+        cielab: record.cielab || null,
+        calibrationStatus: record.calibrationStatus || (record.referenceCardCalibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED'),
       };
 
       const cert = await generateEvidenceCertificateAsync(
@@ -392,8 +394,9 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
   };
 
   const renderOutcomeBadge = (outcome?: string) => {
-    const isPos = outcome === 'POSITIVE';
-    const isNeg = outcome === 'NEGATIVE';
+    const presumptive = toPresumptiveOutcome(outcome);
+    const isPos = presumptive === 'PRESUMPTIVE POSITIVE';
+    const isNeg = presumptive === 'PRESUMPTIVE NEGATIVE';
     return (
       <View
         style={[
@@ -411,7 +414,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
             !isPos && !isNeg && styles.outcomeBadgeTextInconclusive,
           ]}
         >
-          {isPos ? 'POSITIVE' : isNeg ? 'NEGATIVE' : 'INCONCLUSIVE'}
+          {presumptive}
         </Text>
       </View>
     );
@@ -487,14 +490,14 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
 
         {/* Filter Pills */}
         <View style={styles.filterChipsRow}>
-          {(['ALL', 'POSITIVE', 'NEGATIVE', 'INCONCLUSIVE'] as const).map((filter) => (
+          {(['ALL', 'PRESUMPTIVE POSITIVE', 'PRESUMPTIVE NEGATIVE', 'INCONCLUSIVE'] as const).map((filter) => (
             <Pressable
               key={filter}
               style={[
                 styles.filterChip,
                 selectedOutcomeFilter === filter && styles.filterChipActive,
-                selectedOutcomeFilter === filter && filter === 'POSITIVE' && styles.filterChipActivePos,
-                selectedOutcomeFilter === filter && filter === 'NEGATIVE' && styles.filterChipActiveNeg,
+                selectedOutcomeFilter === filter && filter === 'PRESUMPTIVE POSITIVE' && styles.filterChipActivePos,
+                selectedOutcomeFilter === filter && filter === 'PRESUMPTIVE NEGATIVE' && styles.filterChipActiveNeg,
               ]}
               onPress={() => setSelectedOutcomeFilter(filter)}
             >
@@ -683,9 +686,9 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.modalScrollContent}
                 renderItem={({ item }) => {
-                  const swatchHex = parseCalibratedHex(item.calibratedRgb);
-                  const isPos = item.outcomeCategory === 'POSITIVE';
-                  const isNeg = item.outcomeCategory === 'NEGATIVE';
+                  const presumptive = toPresumptiveOutcome(item.outcomeCategory);
+                  const isPos = presumptive === 'PRESUMPTIVE POSITIVE';
+                  const isNeg = presumptive === 'PRESUMPTIVE NEGATIVE';
 
                   return (
                     <View>
@@ -837,6 +840,30 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
                             {item.referenceCardCalibrated ? '✓ Calibrated in-frame' : 'Standard'}
                           </Text>
                         </View>
+
+                        <View style={styles.detailRow}>
+                          <Text style={styles.detailLabel}>Calibration Status</Text>
+                          <Text
+                            style={[
+                              styles.detailValue,
+                              {
+                                fontWeight: '700',
+                                color: (item.calibrationStatus === 'CALIBRATED' || item.referenceCardCalibrated) ? '#10B981' : '#F59E0B',
+                              },
+                            ]}
+                          >
+                            {item.calibrationStatus || (item.referenceCardCalibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED')}
+                          </Text>
+                        </View>
+
+                        {item.cielab ? (
+                          <View style={styles.detailRow}>
+                            <Text style={styles.detailLabel}>CIELAB Telemetry (D65)</Text>
+                            <Text style={[styles.detailValue, styles.monoText]}>
+                              {item.cielab}
+                            </Text>
+                          </View>
+                        ) : null}
 
                         <View style={styles.detailRow}>
                           <Text style={styles.detailLabel}>Image SHA-256 Digest</Text>
@@ -1081,7 +1108,7 @@ const styles = StyleSheet.create({
   searchClearBtn: { padding: 4 },
   searchClearText: { fontSize: 12, color: '#94A3B8', fontWeight: '700' },
 
-  filterChipsRow: { flexDirection: 'row', gap: 6, marginBottom: 8 },
+  filterChipsRow: { flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
   filterChip: {
     paddingHorizontal: 10,
     paddingVertical: 5,

@@ -29,6 +29,8 @@ export interface FieldTestRecord {
   calibratedRgb?: string | null; // e.g. JSON string "[0, 71, 171]" or hex
   rawRgb?: string | null;
   referenceCardCalibrated?: boolean;
+  cielab?: string | null;
+  calibrationStatus?: string | null;
   digitalSignature?: string;
   signatureVerified?: boolean;
 }
@@ -56,6 +58,8 @@ interface DatabaseRow {
   calibrated_rgb: string | null;
   raw_rgb: string | null;
   reference_card_calibrated: number | null;
+  cielab: string | null;
+  calibration_status: string | null;
   digital_signature: string | null;
   signature_verified: number | null;
 }
@@ -103,6 +107,8 @@ export async function getDatabaseAsync(): Promise<SQLite.SQLiteDatabase> {
           calibrated_rgb TEXT DEFAULT NULL,
           raw_rgb TEXT DEFAULT NULL,
           reference_card_calibrated INTEGER DEFAULT 0,
+          cielab TEXT DEFAULT NULL,
+          calibration_status TEXT DEFAULT 'CALIBRATED',
           digital_signature TEXT DEFAULT NULL,
           signature_verified INTEGER DEFAULT 1
         );
@@ -139,6 +145,8 @@ export async function getDatabaseAsync(): Promise<SQLite.SQLiteDatabase> {
         { col: 'calibrated_rgb', sql: "ALTER TABLE field_test_records ADD COLUMN calibrated_rgb TEXT DEFAULT NULL;" },
         { col: 'raw_rgb', sql: "ALTER TABLE field_test_records ADD COLUMN raw_rgb TEXT DEFAULT NULL;" },
         { col: 'reference_card_calibrated', sql: "ALTER TABLE field_test_records ADD COLUMN reference_card_calibrated INTEGER DEFAULT 0;" },
+        { col: 'cielab', sql: "ALTER TABLE field_test_records ADD COLUMN cielab TEXT DEFAULT NULL;" },
+        { col: 'calibration_status', sql: "ALTER TABLE field_test_records ADD COLUMN calibration_status TEXT DEFAULT 'CALIBRATED';" },
         { col: 'digital_signature', sql: "ALTER TABLE field_test_records ADD COLUMN digital_signature TEXT DEFAULT NULL;" },
         { col: 'signature_verified', sql: "ALTER TABLE field_test_records ADD COLUMN signature_verified INTEGER DEFAULT 1;" },
       ];
@@ -195,6 +203,8 @@ export async function saveFieldTestRecordAsync(params: {
   calibratedRgb?: string | null;
   rawRgb?: string | null;
   referenceCardCalibrated?: boolean;
+  cielab?: string | null;
+  calibrationStatus?: string | null;
   digitalSignature?: string;
   signatureVerified?: boolean;
 }): Promise<FieldTestRecord> {
@@ -239,6 +249,8 @@ export async function saveFieldTestRecordAsync(params: {
     calibratedRgb: params.calibratedRgb ?? null,
     rawRgb: params.rawRgb ?? null,
     referenceCardCalibrated: params.referenceCardCalibrated ?? false,
+    cielab: params.cielab ?? null,
+    calibrationStatus: params.calibrationStatus ?? (params.referenceCardCalibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED'),
     digitalSignature: params.digitalSignature ?? undefined,
     signatureVerified: params.signatureVerified ?? true,
   };
@@ -251,8 +263,9 @@ export async function saveFieldTestRecordAsync(params: {
         location_status, operator_id, image_hash, server_record_hash,
         server_prev_hash, synced_at, kit_type, outcome_category,
         presumptive_substance, confidence_score, calibrated_rgb,
-        raw_rgb, reference_card_calibrated, digital_signature, signature_verified
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+        raw_rgb, reference_card_calibrated, cielab, calibration_status,
+        digital_signature, signature_verified
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         record.id,
         record.referenceId,
@@ -276,6 +289,8 @@ export async function saveFieldTestRecordAsync(params: {
         record.calibratedRgb ?? null,
         record.rawRgb ?? null,
         record.referenceCardCalibrated ? 1 : 0,
+        record.cielab ?? null,
+        record.calibrationStatus ?? 'CALIBRATED',
         record.digitalSignature ?? null,
         record.signatureVerified ? 1 : 0,
       ]
@@ -345,7 +360,8 @@ export async function getFieldTestRecordsAsync(options: {
         location_status, operator_id, image_hash, server_record_hash,
         server_prev_hash, synced_at, kit_type, outcome_category,
         presumptive_substance, confidence_score, calibrated_rgb,
-        raw_rgb, reference_card_calibrated, digital_signature, signature_verified
+        raw_rgb, reference_card_calibrated, cielab, calibration_status,
+        digital_signature, signature_verified
        FROM field_test_records`;
 
   const whereClauses: string[] = [];
@@ -358,8 +374,16 @@ export async function getFieldTestRecordsAsync(options: {
   }
 
   if (options.outcomeCategory && options.outcomeCategory !== 'ALL') {
-    whereClauses.push('outcome_category = ?');
-    params.push(options.outcomeCategory);
+    if (options.outcomeCategory === 'PRESUMPTIVE POSITIVE' || options.outcomeCategory === 'POSITIVE') {
+      whereClauses.push('(outcome_category = ? OR outcome_category = ?)');
+      params.push('PRESUMPTIVE POSITIVE', 'POSITIVE');
+    } else if (options.outcomeCategory === 'PRESUMPTIVE NEGATIVE' || options.outcomeCategory === 'NEGATIVE') {
+      whereClauses.push('(outcome_category = ? OR outcome_category = ?)');
+      params.push('PRESUMPTIVE NEGATIVE', 'NEGATIVE');
+    } else {
+      whereClauses.push('outcome_category = ?');
+      params.push(options.outcomeCategory);
+    }
   }
 
   if (options.kitType && options.kitType !== 'ALL') {
@@ -409,6 +433,8 @@ export async function getFieldTestRecordsAsync(options: {
       calibratedRgb: row.calibrated_rgb || null,
       rawRgb: row.raw_rgb || null,
       referenceCardCalibrated: Boolean(row.reference_card_calibrated),
+      cielab: row.cielab || null,
+      calibrationStatus: row.calibration_status || (row.reference_card_calibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED'),
       digitalSignature: row.digital_signature || undefined,
       signatureVerified: row.signature_verified !== 0,
     }));
@@ -433,7 +459,8 @@ export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
         location_status, operator_id, image_hash, server_record_hash,
         server_prev_hash, synced_at, kit_type, outcome_category,
         presumptive_substance, confidence_score, calibrated_rgb,
-        raw_rgb, reference_card_calibrated, digital_signature, signature_verified
+        raw_rgb, reference_card_calibrated, cielab, calibration_status,
+        digital_signature, signature_verified
        FROM field_test_records
        WHERE sync_status IN ('pending', 'local_only', 'conflict')
        ORDER BY created_at ASC;`
@@ -463,6 +490,8 @@ export async function getPendingSyncRecordsAsync(): Promise<FieldTestRecord[]> {
       calibratedRgb: row.calibrated_rgb || null,
       rawRgb: row.raw_rgb || null,
       referenceCardCalibrated: Boolean(row.reference_card_calibrated),
+      cielab: row.cielab || null,
+      calibrationStatus: row.calibration_status || (row.reference_card_calibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED'),
       digitalSignature: row.digital_signature || undefined,
       signatureVerified: row.signature_verified !== 0,
     }));
@@ -509,9 +538,9 @@ export async function getRecordStatsAsync(): Promise<{
         pendingCount += r.count;
       }
 
-      if (r.outcome_category === 'POSITIVE') {
+      if (r.outcome_category === 'POSITIVE' || r.outcome_category === 'PRESUMPTIVE POSITIVE') {
         positiveCount += r.count;
-      } else if (r.outcome_category === 'NEGATIVE') {
+      } else if (r.outcome_category === 'NEGATIVE' || r.outcome_category === 'PRESUMPTIVE NEGATIVE') {
         negativeCount += r.count;
       } else {
         inconclusiveCount += r.count;

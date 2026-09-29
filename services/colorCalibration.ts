@@ -13,6 +13,7 @@
 
 import { Platform } from 'react-native';
 import * as jpeg from 'jpeg-js';
+import { rgbToCielab, formatCielab, type CielabColor } from './cielabColor';
 
 export interface ReferenceCardPatch {
   name: string;
@@ -78,6 +79,8 @@ export interface CalibrationReport {
   rawSampleHex: string;
   calibratedSampleRgb: [number, number, number];
   calibratedSampleHex: string;
+  calibratedCielab?: CielabColor;
+  calibratedCielabFormatted?: string;
   illuminantCorrectionApplied: boolean;
   notes: string;
 }
@@ -179,6 +182,7 @@ export function calibrateSampleWithReferenceCard(
   const calibratedB = Math.min(255, Math.max(0, rawSampleRgb[2] * gains.gainB));
 
   const calibratedRgb: [number, number, number] = clampRgb([calibratedR, calibratedG, calibratedB]);
+  const calLab = rgbToCielab(calibratedRgb);
 
   return {
     isCalibrated: true,
@@ -190,6 +194,8 @@ export function calibrateSampleWithReferenceCard(
     rawSampleHex: rgbToHex(rawSampleRgb),
     calibratedSampleRgb: calibratedRgb,
     calibratedSampleHex: rgbToHex(calibratedRgb),
+    calibratedCielab: calLab,
+    calibratedCielabFormatted: formatCielab(calLab),
     illuminantCorrectionApplied: true,
     notes,
   };

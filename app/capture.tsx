@@ -25,6 +25,7 @@ import { sendRecordToBackendAsync } from '@/services/backendApi';
 import {
   REAGENT_KITS,
   classifyReagentReaction,
+  toPresumptiveOutcome,
   type ReagentClassificationResult,
   type ReagentKitDefinition,
 } from '@/services/reagentLibrary';
@@ -335,7 +336,8 @@ export default function CaptureScreen() {
         calib.calibratedSampleRgb,
         calib.rawSampleRgb,
         kitId,
-        calib.lightingQuality
+        calib.lightingQuality,
+        calib.isCalibrated
       );
       setClassificationResult(classification);
 
@@ -357,7 +359,9 @@ export default function CaptureScreen() {
         presumptiveSubstance: classification.presumptiveSubstance,
         confidenceScore: classification.confidenceScore,
         calibratedRgb: JSON.stringify(calib.calibratedSampleRgb),
-        referenceCardCalibrated: true,
+        referenceCardCalibrated: calib.isCalibrated,
+        cielab: classification.cielabFormatted,
+        calibrationStatus: classification.calibrationStatus,
       };
 
       const { signature } = await signTestRecordAsync(canonicalPayload);
@@ -539,6 +543,7 @@ export default function CaptureScreen() {
       }
 
       const outcome = classificationResult?.outcomeCategory || 'INCONCLUSIVE';
+      const presumptiveOutcome = classificationResult?.presumptiveOutcome || toPresumptiveOutcome(outcome);
       const substance = classificationResult?.presumptiveSubstance || 'Presumptive (Unanalyzed)';
 
       // 1. Save to local storage (Offline-First Guarantee)
@@ -553,22 +558,24 @@ export default function CaptureScreen() {
         operatorId: operatorId.trim() || 'Unassigned',
         imageHash: finalHash || 'UNAVAILABLE',
         analysisStatus: 'completed',
-        presumptiveStatus: `${outcome}: ${substance}`,
+        presumptiveStatus: `${presumptiveOutcome}: ${substance}`,
         syncStatus: 'pending',
         kitType: selectedKitId,
-        outcomeCategory: outcome,
+        outcomeCategory: presumptiveOutcome,
         presumptiveSubstance: substance,
         confidenceScore: classificationResult?.confidenceScore ?? null,
         calibratedRgb: calibrationReport ? JSON.stringify(calibrationReport.calibratedSampleRgb) : null,
         rawRgb: calibrationReport ? JSON.stringify(calibrationReport.rawSampleRgb) : null,
         referenceCardCalibrated: Boolean(calibrationReport?.isCalibrated),
+        cielab: classificationResult?.cielabFormatted || (calibrationReport?.calibratedCielabFormatted ?? null),
+        calibrationStatus: classificationResult?.calibrationStatus || (calibrationReport?.isCalibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED'),
         digitalSignature: digitalSignature || undefined,
         signatureVerified: signatureVerification?.isAuthentic ?? true,
       });
 
       // 2. Attempt sync with backend
       let alertTitle = 'Record Saved Locally';
-      let alertMsg = `Record "${trimmedId}" saved with cryptographic SHA-256 signature (${outcome}).`;
+      let alertMsg = `Record "${trimmedId}" saved with cryptographic SHA-256 signature (${presumptiveOutcome}).`;
 
       try {
         const syncRes = await sendRecordToBackendAsync(savedLocal);
@@ -609,9 +616,9 @@ export default function CaptureScreen() {
   // REVIEW & SAVE SCREEN (Post-Capture / Preset Analysis)
   if (capturedImage) {
     const outcome = classificationResult?.outcomeCategory || 'INCONCLUSIVE';
-    const isPositive = outcome === 'POSITIVE';
-    const isNegative = outcome === 'NEGATIVE';
-    const isInconclusive = outcome === 'INCONCLUSIVE';
+    const isPositive = outcome === 'POSITIVE' || outcome === 'PRESUMPTIVE POSITIVE';
+    const isNegative = outcome === 'NEGATIVE' || outcome === 'PRESUMPTIVE NEGATIVE';
+    const isInconclusive = !isPositive && !isNegative;
 
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -669,7 +676,7 @@ export default function CaptureScreen() {
                       isInconclusive && styles.outcomePillTextInconclusive,
                     ]}
                   >
-                    {isPositive ? '✓ POSITIVE (PRESUMPTIVE)' : isNegative ? '✓ NEGATIVE (PRESUMPTIVE)' : '⚠ INCONCLUSIVE'}
+                    {isPositive ? '✓ PRESUMPTIVE POSITIVE' : isNegative ? '✓ PRESUMPTIVE NEGATIVE' : '⚠ INCONCLUSIVE'}
                   </Text>
                 </View>
                 {classificationResult && (
@@ -789,9 +796,41 @@ export default function CaptureScreen() {
               </View>
 
               <View style={styles.telemetryRow}>
-                <Text style={styles.telemetryLabel}>Reaction Color Distance (ΔE)</Text>
+                <Text style={styles.telemetryLabel}>Reaction Distance (ΔE)</Text>
                 <Text style={styles.telemetryVal}>
                   {classificationResult ? `${classificationResult.colorDeltaE.toFixed(1)} units` : '--'}
+                </Text>
+              </View>
+
+              <View style={styles.telemetryRow}>
+                <Text style={styles.telemetryLabel}>CIELAB Telemetry (D65)</Text>
+                <Text style={[styles.telemetryVal, styles.monoText]}>
+                  {classificationResult?.cielabFormatted || calibrationReport?.calibratedCielabFormatted || 'L* --, a* --, b* --'}
+                </Text>
+              </View>
+
+              <View style={styles.telemetryRow}>
+                <Text style={styles.telemetryLabel}>CIELAB ΔE*ab (CIE76)</Text>
+                <Text style={[styles.telemetryVal, styles.monoText]}>
+                  {classificationResult?.deltaE76 !== undefined ? `ΔE*ab = ${classificationResult.deltaE76.toFixed(1)}` : '--'}
+                </Text>
+              </View>
+
+              <View style={styles.telemetryRow}>
+                <Text style={styles.telemetryLabel}>Calibration Status</Text>
+                <Text
+                  style={[
+                    styles.telemetryVal,
+                    {
+                      fontWeight: '700',
+                      color:
+                        (classificationResult?.calibrationStatus === 'CALIBRATED' || calibrationReport?.isCalibrated)
+                          ? '#10B981'
+                          : '#F59E0B',
+                    },
+                  ]}
+                >
+                  {classificationResult?.calibrationStatus || (calibrationReport?.isCalibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED')}
                 </Text>
               </View>
             </View>
