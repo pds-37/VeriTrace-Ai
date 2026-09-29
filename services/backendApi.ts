@@ -159,6 +159,51 @@ export async function uploadImageAsync(imageUri: string, expectedHash: string): 
 
   const filename = imageUri.split('/').pop() || `${expectedHash}.jpg`;
 
+  if (Platform.OS === 'web') {
+    try {
+      let blob: Blob;
+      if (imageUri.startsWith('data:')) {
+        const response = await fetch(imageUri);
+        blob = await response.blob();
+      } else if (imageUri.startsWith('blob:') || imageUri.startsWith('http')) {
+        const response = await fetch(imageUri);
+        blob = await response.blob();
+      } else {
+        blob = new Blob([imageUri], { type: 'image/jpeg' });
+      }
+
+      const formData = new FormData();
+      formData.append('file', blob, filename);
+
+      const headers: Record<string, string> = {
+        'Bypass-Tunnel-Reminder': 'true',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.image_sha256 && data.image_sha256 !== expectedHash) {
+          console.warn(`Hash mismatch on web upload! Expected: ${expectedHash}, Got: ${data.image_sha256}`);
+        }
+        return true;
+      } else {
+        console.warn(`Failed to upload image on web. Status: ${response.status}`);
+        return false;
+      }
+    } catch (webErr) {
+      console.warn('Network error during web image upload:', webErr);
+      return false;
+    }
+  }
+
   try {
     const uploadResult = await FileSystem.uploadAsync(endpoint, imageUri, {
       httpMethod: 'POST',

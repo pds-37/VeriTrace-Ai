@@ -83,6 +83,27 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Core 5-Step Forensic Pipeline Strip */}
+        <View style={styles.pipelineStrip}>
+          <Text style={styles.pipelineTitle}>CORE 5-STEP FORENSIC WORKFLOW</Text>
+          <View style={styles.pipelineRow}>
+            {[
+              { num: '1', title: 'Capture', icon: '📸' },
+              { num: '2', title: 'Calibrate', icon: '🎯' },
+              { num: '3', title: 'Classify', icon: '🔬' },
+              { num: '4', title: 'Verify', icon: '🛡️' },
+              { num: '5', title: 'Store', icon: '💾' },
+            ].map((step, idx) => (
+              <View key={idx} style={styles.pipelineStepItem}>
+                <View style={styles.pipelineStepBadge}>
+                  <Text style={styles.pipelineStepIcon}>{step.icon}</Text>
+                </View>
+                <Text style={styles.pipelineStepText}>{step.title}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
         {/* Outcome Breakdown Statistics */}
         <Text style={styles.sectionTitle}>Field Test Outbreak Telemetry</Text>
 
@@ -218,7 +239,7 @@ export default function HomeScreen() {
             <View style={styles.referenceCardRender}>
               <View style={styles.referenceCardBrandRow}>
                 <Text style={styles.referenceCardBrand}>VERITRACE CALIBRATOR</Text>
-                <Text style={styles.referenceCardVersion}>18% NEUTRAL GRAY / ISO-17025</Text>
+                <Text style={styles.referenceCardVersion}>18% NEUTRAL GRAY / REFERENCE STANDARD</Text>
               </View>
 
               <View style={styles.patchesGrid}>
@@ -322,6 +343,51 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     fontSize: 12,
     fontWeight: '700',
+  },
+
+  pipelineStrip: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  pipelineTitle: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748B',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  pipelineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  pipelineStepItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  pipelineStepBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  pipelineStepIcon: {
+    fontSize: 16,
+  },
+  pipelineStepText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1E293B',
   },
 
   sectionTitle: {

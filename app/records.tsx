@@ -58,6 +58,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FieldTestRecord | null>(null);
+  const [isTamperSimulated, setIsTamperSimulated] = useState(false);
   const [activeVerification, setActiveVerification] = useState<VerificationResult | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -159,6 +160,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
   useEffect(() => {
     if (!selectedRecord) {
       setActiveVerification(null);
+      setIsTamperSimulated(false);
       return;
     }
 
@@ -167,13 +169,13 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
       try {
         const payload: CanonicalRecordPayload = {
           id: selectedRecord.id,
-          referenceId: selectedRecord.referenceId,
-          operatorId: selectedRecord.operatorId || 'Unassigned',
+          referenceId: isTamperSimulated ? `${selectedRecord.referenceId}_TAMPERED` : selectedRecord.referenceId,
+          operatorId: isTamperSimulated ? 'BADGE_FORGERY_9999' : (selectedRecord.operatorId || 'Unassigned'),
           timestamp: selectedRecord.createdAt,
           latitude: selectedRecord.latitude,
           longitude: selectedRecord.longitude,
           locationStatus: selectedRecord.locationStatus,
-          imageHash: selectedRecord.imageHash,
+          imageHash: isTamperSimulated ? '0000000000000000000000000000000000000000000000000000000000000000' : selectedRecord.imageHash,
           kitType: selectedRecord.kitType || 'scott',
           outcomeCategory: (selectedRecord.outcomeCategory as string) || 'INCONCLUSIVE',
           presumptiveSubstance: selectedRecord.presumptiveSubstance || selectedRecord.presumptiveStatus || '',
@@ -187,12 +189,14 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
           setActiveVerification(res);
         } else {
           setActiveVerification({
-            isAuthentic: true,
-            computedSignature: 'LEGACY_SHA256',
+            isAuthentic: !isTamperSimulated,
+            computedSignature: isTamperSimulated ? 'TAMPERED_PAYLOAD' : 'LEGACY_SHA256',
             storedSignature: 'LEGACY_SHA256',
-            tamperDetected: false,
+            tamperDetected: isTamperSimulated,
             verifiedAt: new Date().toISOString(),
-            auditDetails: 'Legacy record preserved. Cryptographic SHA-256 image digest verified.',
+            auditDetails: isTamperSimulated
+              ? 'SECURITY WARNING: Record payload does not match stored hash. Tampering detected.'
+              : 'Legacy record preserved. Cryptographic SHA-256 image digest verified.',
           });
         }
       } catch (e: any) {
@@ -203,7 +207,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
     };
 
     verifySelected();
-  }, [selectedRecord]);
+  }, [selectedRecord, isTamperSimulated]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -723,6 +727,37 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
                         </Text>
                       </View>
 
+                      {/* DEMO INTEGRITY TAMPER CONTROLS (SIH 2026 JURY DEMO) */}
+                      <View style={styles.demoTamperBox}>
+                        <View style={styles.demoTamperHeaderRow}>
+                          <Text style={styles.demoTamperTitle}>🛡️ SIH 2026 Live Integrity Verification Test</Text>
+                          <Text style={styles.demoTamperSubtitle}>
+                            {isTamperSimulated
+                              ? 'SIMULATION ACTIVE: Operator & hash modified — signature check failed'
+                              : 'UNTOUCHED: Canonical payload matches HMAC-SHA256 signature'}
+                          </Text>
+                        </View>
+                        {!isTamperSimulated ? (
+                          <Pressable
+                            style={styles.demoTamperButton}
+                            onPress={() => setIsTamperSimulated(true)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Simulate Tampering"
+                          >
+                            <Text style={styles.demoTamperButtonText}>⚠️ Simulate Tampering (Judge Demo)</Text>
+                          </Pressable>
+                        ) : (
+                          <Pressable
+                            style={styles.demoRestoreButton}
+                            onPress={() => setIsTamperSimulated(false)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Restore Authentic State"
+                          >
+                            <Text style={styles.demoRestoreButtonText}>✓ Restore Authentic State</Text>
+                          </Pressable>
+                        )}
+                      </View>
+
                       {/* OUTCOME SUMMARY CARD */}
                       <View
                         style={[
@@ -1215,6 +1250,35 @@ const styles = StyleSheet.create({
   cryptoBadgeTextVerified: { color: '#065F46' },
   cryptoBadgeTextTampered: { color: '#991B1B' },
   cryptoDetailText: { fontSize: 10, color: '#334155', lineHeight: 14 },
+  demoTamperBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    padding: 10,
+    marginBottom: 12,
+  },
+  demoTamperHeaderRow: { marginBottom: 6 },
+  demoTamperTitle: { fontSize: 11, fontWeight: '800', color: '#1E293B' },
+  demoTamperSubtitle: { fontSize: 10, color: '#64748B', marginTop: 1 },
+  demoTamperButton: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#F87171',
+    borderRadius: 6,
+    paddingVertical: 7,
+    alignItems: 'center',
+  },
+  demoTamperButtonText: { color: '#991B1B', fontSize: 11, fontWeight: '700' },
+  demoRestoreButton: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#4ADE80',
+    borderRadius: 6,
+    paddingVertical: 7,
+    alignItems: 'center',
+  },
+  demoRestoreButtonText: { color: '#166534', fontSize: 11, fontWeight: '700' },
 
   outcomeModalCard: {
     backgroundColor: '#FFFFFF',

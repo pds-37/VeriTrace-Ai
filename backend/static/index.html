@@ -86,11 +86,16 @@
             <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex justify-between items-center">
                 <div>
                     <h3 class="text-sm font-bold text-red-800">SIH 2026 Video Demo Controls</h3>
-                    <p class="text-xs text-red-600">Simulate an attack on the SQLite database to demonstrate chain compromise detection.</p>
+                    <p class="text-xs text-red-600">Simulate an attack on the SQLite database to demonstrate chain compromise detection, or restore the record.</p>
                 </div>
-                <button id="simulate-tamper-btn" class="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-red-700 transition">
-                    Simulate Database Tamper
-                </button>
+                <div class="flex space-x-2">
+                    <button id="simulate-tamper-btn" class="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-red-700 transition">
+                        Simulate Database Tamper
+                    </button>
+                    <button id="restore-tamper-btn" class="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-emerald-700 transition">
+                        Restore Record
+                    </button>
+                </div>
             </div>
 
             <!-- DATA TABLE -->
@@ -313,7 +318,7 @@
         }
 
         document.getElementById('simulate-tamper-btn').addEventListener('click', async () => {
-            if(!confirm("Are you sure? This will permanently corrupt the latest record in the database for the demo.")) return;
+            if(!confirm("Are you sure? This will intentionally corrupt the latest record in the database for the demo.")) return;
             try {
                 const res = await fetch(`${BASE_URL}/api/chain/simulate-tamper`, {
                     method: 'POST',
@@ -321,8 +326,28 @@
                 });
                 if (res.ok) {
                     alert("Tamper simulated successfully! Click Verify Full Chain to see the detection.");
+                    loadRecords();
                 } else {
                     alert("Tamper failed.");
+                }
+            } catch (err) {
+                alert("Network error.");
+            }
+        });
+
+        document.getElementById('restore-tamper-btn').addEventListener('click', async () => {
+            try {
+                // Get latest sequence from loaded records or 1
+                const maxSeq = recordsData.length > 0 ? Math.max(...recordsData.map(r => r.sequence_number)) : 1;
+                const res = await fetch(`${BASE_URL}/api/chain/simulate-restore?sequence_number=${maxSeq}&original_operator=admin`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                if (res.ok) {
+                    alert("Record restored successfully! Click Verify Full Chain to confirm 100% integrity.");
+                    loadRecords();
+                } else {
+                    alert("Restore failed.");
                 }
             } catch (err) {
                 alert("Network error.");

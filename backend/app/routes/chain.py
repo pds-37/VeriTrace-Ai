@@ -34,19 +34,38 @@ def simulate_tamper(current_user: Dict[str, Any] = Depends(get_admin_user)):
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        # Find the max sequence number
-        cursor.execute("SELECT MAX(sequence_number) FROM records")
+        # Find the max sequence number in evidence_records table
+        cursor.execute("SELECT MAX(sequence_number) FROM evidence_records")
         row = cursor.fetchone()
         if not row or not row[0]:
             return {"status": "error", "detail": "No records to tamper."}
         max_seq = row[0]
         
-        # Corrupt the operator_id
+        # Corrupt the operator_id in evidence_records table
         cursor.execute(
-            "UPDATE records SET operator_id = 'TAMPERED-OPERATOR' WHERE sequence_number = ?",
+            "UPDATE evidence_records SET operator_id = 'TAMPERED-OPERATOR' WHERE sequence_number = ?",
             (max_seq,)
         )
         conn.commit()
         return {"status": "success", "detail": f"Record seq {max_seq} tampered successfully."}
     finally:
         conn.close()
+
+@router.post(
+    "/simulate-restore",
+    summary="Restore Tampered Record for Demo",
+    description="Restores tampered record back to valid state for continuous demonstration."
+)
+def simulate_restore(sequence_number: int, original_operator: str = "Unassigned", current_user: Dict[str, Any] = Depends(get_admin_user)):
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE evidence_records SET operator_id = ? WHERE sequence_number = ?",
+            (original_operator, sequence_number)
+        )
+        conn.commit()
+        return {"status": "success", "detail": f"Record seq {sequence_number} restored successfully."}
+    finally:
+        conn.close()
+

@@ -30,6 +30,7 @@ import {
 } from '@/services/reagentLibrary';
 import {
   calibrateSampleWithReferenceCard,
+  extractDualZoneColorsAsync,
   DEMO_BENCHMARK_PRESETS,
   STANDARD_REFERENCE_PATCHES,
   rgbToHex,
@@ -66,6 +67,7 @@ export default function CaptureScreen() {
   const [digitalSignature, setDigitalSignature] = useState('');
   const [signatureVerification, setSignatureVerification] = useState<VerificationResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [telemetryMode, setTelemetryMode] = useState<string>('');
 
   // Reference Card Helper Modal
   const [isCardModalVisible, setIsCardModalVisible] = useState(false);
@@ -201,21 +203,18 @@ export default function CaptureScreen() {
         rawRefRgb = presetOverride.rawReferenceRgb;
         kitId = presetOverride.kitId;
         setSelectedKitId(presetOverride.kitId);
+        setTelemetryMode(`DEMO BENCHMARK CONTROL: ${presetOverride.title}`);
       } else {
-        // Dynamic color extraction from camera frame
-        // Under standard operation, samples the two target zones (Reference card + Reaction)
-        if (selectedKitId === 'scott') {
-          rawSampleRgb = [15, 68, 168];
-          rawRefRgb = [142, 130, 120]; // Mild warm room light
-        } else if (selectedKitId === 'marquis') {
-          rawSampleRgb = [74, 12, 126];
-          rawRefRgb = [126, 127, 129];
-        } else if (selectedKitId === 'duquenois_levine') {
-          rawSampleRgb = [56, 30, 92];
-          rawRefRgb = [128, 128, 128];
+        // Dynamic pixel sampling from camera frame or file upload
+        const extracted = await extractDualZoneColorsAsync(imgUri, imgBase64, kitId);
+        rawSampleRgb = extracted.rawSampleRgb || extracted.reactionRgb;
+        rawRefRgb = extracted.rawReferenceRgb || extracted.referenceRgb;
+        if (extracted.source === 'html5_canvas') {
+          setTelemetryMode('DYNAMIC OPTICAL SAMPLING (HTML5 Canvas Dual-Zone Pixel Analysis)');
+        } else if (extracted.source === 'jpeg_decoder') {
+          setTelemetryMode('DYNAMIC OPTICAL SAMPLING (Native JPEG Dual-Zone Pixel Analysis)');
         } else {
-          rawSampleRgb = [0, 102, 105];
-          rawRefRgb = [128, 128, 128];
+          setTelemetryMode('FIELD OPTICAL RETICLE TELEMETRY (Dual-Zone Optical Target)');
         }
       }
 
@@ -344,6 +343,7 @@ export default function CaptureScreen() {
     setClassificationResult(null);
     setDigitalSignature('');
     setSignatureVerification(null);
+    setTelemetryMode('');
   };
 
   /**
@@ -558,6 +558,12 @@ export default function CaptureScreen() {
                   </Text>
                 </View>
               </View>
+
+              {telemetryMode ? (
+                <View style={styles.telemetryModeBanner}>
+                  <Text style={styles.telemetryModeBannerText}>{telemetryMode}</Text>
+                </View>
+              ) : null}
 
               {/* Color Swatch Comparison */}
               <View style={styles.colorComparisonGrid}>
@@ -920,7 +926,7 @@ export default function CaptureScreen() {
             <View style={styles.referenceCardRender}>
               <View style={styles.referenceCardBrandRow}>
                 <Text style={styles.referenceCardBrand}>VERITRACE CALIBRATOR</Text>
-                <Text style={styles.referenceCardVersion}>STD-18% GRAY / ISO-17025</Text>
+                <Text style={styles.referenceCardVersion}>STD-18% GRAY / REFERENCE STANDARD</Text>
               </View>
 
               <View style={styles.patchesGrid}>
@@ -1433,4 +1439,19 @@ const styles = StyleSheet.create({
   presetLighting: { fontSize: 10, color: '#64748B', fontStyle: 'italic' },
   presetTitle: { fontSize: 13, fontWeight: '700', color: '#0F172A', marginBottom: 2 },
   presetDesc: { fontSize: 11, color: '#475569', lineHeight: 16 },
+  telemetryModeBanner: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 12,
+  },
+  telemetryModeBannerText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1D4ED8',
+    letterSpacing: 0.3,
+  },
 });

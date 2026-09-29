@@ -1,7 +1,7 @@
 /**
  * Cryptographic Tamper-Evident Digital Signing Engine
  * 
- * Generates an immutable, mathematically verifiable digital signature for every
+ * Generates a tamper-evident, mathematically verifiable digital signature for every
  * field-test record, binding:
  * - Unique Record ID & Reference Sample ID
  * - UTC & Local Timestamps
@@ -18,7 +18,7 @@
 import * as Crypto from 'expo-crypto';
 
 // Standard device signing secret (In enterprise deployment, backed by Secure Enclave / Android KeyStore)
-const DEVICE_SIGNING_SALT = 'FTC_FORENSIC_INTEGRITY_SALT_v1_SECURE_KEY_2026';
+const DEVICE_SIGNING_SALT = process.env.EXPO_PUBLIC_DEVICE_SALT || 'FTC_FORENSIC_INTEGRITY_SALT_v1_SECURE_KEY_2026';
 
 export interface CanonicalRecordPayload {
   id: string;

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import bcrypt
@@ -6,7 +7,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from .database import get_connection
 
-SECRET_KEY = "SIH2026_SUPER_SECRET_KEY_PROTOTYPE"
+SECRET_KEY = os.getenv("SECRET_KEY", "SIH2026_SUPER_SECRET_KEY_PROTOTYPE")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 

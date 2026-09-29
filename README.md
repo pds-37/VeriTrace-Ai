@@ -249,7 +249,7 @@ To evaluate the system without requiring physical chemical reagents or illicit s
 9. Navigate to the **Records** tab:
    - Test the real-time search bar and filter chips (`All`, `Positive`, `Negative`, `Inconclusive`).
    - Tap your saved record to inspect the live **Cryptographic Tamper Check** (`✓ CRYPTOGRAPHIC SIGNATURE VERIFIED: UNTAMPERED`).
-   - Tap **"📄 Export Evidence Certificate (JSON)"** to download the court-admissible certificate.
+   - Tap **"📄 Export Evidence Certificate (JSON)"** to download the cryptographically verifiable digital evidence certificate.
    - Tap **"📱 Show QR Roadside Slip"** to view the compact handover payload.
 
 ---
