@@ -14,6 +14,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -41,6 +42,9 @@ import { REAGENT_KITS, toPresumptiveOutcome } from '@/services/reagentLibrary';
 
 export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {}) {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobile = windowWidth <= 768;
+  const isSmallMobile = windowWidth <= 360;
   const [records, setRecords] = useState<FieldTestRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -489,7 +493,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
         </View>
 
         {/* Filter Pills */}
-        <View style={styles.filterChipsRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterChipsRowScroll}>
           {(['ALL', 'PRESUMPTIVE POSITIVE', 'PRESUMPTIVE NEGATIVE', 'INCONCLUSIVE'] as const).map((filter) => (
             <Pressable
               key={filter}
@@ -511,7 +515,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
               </Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
 
         {/* Reagent Kit Pills */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.kitFiltersRow}>
@@ -606,6 +610,62 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
           onEndReachedThreshold={0.5}
           renderItem={({ item }) => {
             const swatchHex = parseCalibratedHex(item.calibratedRgb);
+
+            if (isMobile) {
+              return (
+                <Pressable
+                  style={({ pressed }) => [styles.recordCardMobile, pressed && styles.recordCardPressed]}
+                  onPress={() => setSelectedRecord(item)}
+                >
+                  {/* Top: Evidence ID & Outcome Badge */}
+                  <View style={styles.cardMobileTopRow}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={styles.cardMobileRefLabel}>EVIDENCE ID</Text>
+                      <Text style={styles.cardMobileRefId} numberOfLines={1}>
+                        #{item.referenceId}
+                      </Text>
+                    </View>
+                    {renderOutcomeBadge(item.outcomeCategory as string)}
+                  </View>
+
+                  {/* Middle Substance & Details */}
+                  <View style={styles.cardMobileBody}>
+                    <Text style={styles.substanceTitleText} numberOfLines={1}>
+                      {item.presumptiveSubstance || item.sampleName || item.referenceId}
+                    </Text>
+
+                    <View style={styles.cardMobileMetaRow}>
+                      <View style={[styles.swatchInline, { backgroundColor: swatchHex }]} />
+                      <Text style={styles.cardMobileKitText}>
+                        {item.kitType?.toUpperCase() || 'SCOTT'} REAGENT
+                      </Text>
+                      <View style={styles.signedTag}>
+                        <Text style={styles.signedTagText}>✓ SIGNED</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.cardMobileInfoGrid}>
+                      <View style={styles.cardMobileInfoItem}>
+                        <Text style={styles.cardMobileInfoLabel}>TIMESTAMP</Text>
+                        <Text style={styles.cardMobileInfoVal}>{formatDate(item.createdAt)}</Text>
+                      </View>
+                      <View style={styles.cardMobileInfoItem}>
+                        <Text style={styles.cardMobileInfoLabel}>SHA-256 HASH</Text>
+                        <Text style={[styles.cardMobileInfoVal, styles.monoText]} numberOfLines={1}>
+                          {item.imageHash ? `${item.imageHash.slice(0, 16)}...` : 'Unavailable'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Action Button: View Record */}
+                  <View style={styles.viewRecordButton}>
+                    <Text style={styles.viewRecordButtonText}>View Evidentiary Record →</Text>
+                  </View>
+                </Pressable>
+              );
+            }
+
             return (
               <Pressable
                 style={({ pressed }) => [styles.recordCard, pressed && styles.recordCardPressed]}
@@ -666,7 +726,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
         onRequestClose={() => setSelectedRecord(null)}
       >
         <SafeAreaView style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, isMobile && styles.modalContainerMobile]}>
             {/* Modal Top Bar */}
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
@@ -689,6 +749,7 @@ export default function RecordsScreen({ isTab = false }: { isTab?: boolean } = {
                   const presumptive = toPresumptiveOutcome(item.outcomeCategory);
                   const isPos = presumptive === 'PRESUMPTIVE POSITIVE';
                   const isNeg = presumptive === 'PRESUMPTIVE NEGATIVE';
+                  const swatchHex = parseCalibratedHex(item.calibratedRgb);
 
                   return (
                     <View>
@@ -1108,6 +1169,7 @@ const styles = StyleSheet.create({
   searchClearBtn: { padding: 4 },
   searchClearText: { fontSize: 12, color: '#94A3B8', fontWeight: '700' },
 
+  filterChipsRowScroll: { flexDirection: 'row', gap: 6, marginBottom: 8, paddingVertical: 2 },
   filterChipsRow: { flexDirection: 'row', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
   filterChip: {
     paddingHorizontal: 10,
@@ -1159,6 +1221,100 @@ const styles = StyleSheet.create({
   syncNowButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
 
   listContent: { padding: 16, paddingBottom: 40 },
+  recordCardMobile: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+    width: '100%',
+  },
+  cardMobileTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 8,
+  },
+  cardMobileRefLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  cardMobileRefId: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 1,
+  },
+  cardMobileBody: {
+    marginBottom: 10,
+  },
+  cardMobileMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  swatchInline: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  cardMobileKitText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  cardMobileInfoGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 6,
+    gap: 8,
+  },
+  cardMobileInfoItem: {
+    flex: 1,
+  },
+  cardMobileInfoLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#94A3B8',
+    marginBottom: 2,
+  },
+  cardMobileInfoVal: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  viewRecordButton: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  viewRecordButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1D5D8F',
+  },
   recordCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1238,6 +1394,12 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     height: '92%',
     display: 'flex',
+  },
+  modalContainerMobile: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    height: '95%',
+    width: '100%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1359,11 +1521,14 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 5,
+    alignItems: 'center',
+    paddingVertical: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    flexWrap: 'wrap',
+    gap: 4,
   },
-  detailLabel: { fontSize: 11, color: '#64748B' },
+  detailLabel: { fontSize: 11, color: '#64748B', flexShrink: 0 },
   detailValue: { fontSize: 11, fontWeight: '600', color: '#0F172A', flex: 1, textAlign: 'right', marginLeft: 8 },
   monoText: { fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 10 },
   hashMonoText: { fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 9, color: '#334155' },

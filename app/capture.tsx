@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
   Vibration,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -50,6 +51,9 @@ const VideoElement = 'video' as any;
 
 export default function CaptureScreen() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobile = windowWidth <= 768;
+  const isSmallMobile = windowWidth <= 360;
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -303,9 +307,10 @@ export default function CaptureScreen() {
       setIsHashing(false);
 
       // 2. Extract or apply reference card & sample reaction colors
-      let rawSampleRgb: [number, number, number] = [30, 65, 145];
-      let rawRefRgb: [number, number, number] = [128, 128, 128];
+      let rawSampleRgb: [number, number, number] | null = null;
+      let rawRefRgb: [number, number, number] | null = null;
       let kitId = selectedKitId;
+      let calib: CalibrationReport;
 
       if (presetOverride) {
         rawSampleRgb = presetOverride.rawSampleRgb;
@@ -313,28 +318,54 @@ export default function CaptureScreen() {
         kitId = presetOverride.kitId;
         setSelectedKitId(presetOverride.kitId);
         setTelemetryMode(`DEMO BENCHMARK CONTROL: ${presetOverride.title}`);
+        calib = calibrateSampleWithReferenceCard(rawSampleRgb, rawRefRgb, 'gray_18');
       } else {
         // Dynamic pixel sampling from camera frame or file upload
         const extracted = await extractDualZoneColorsAsync(imgUri, imgBase64, kitId);
-        rawSampleRgb = extracted.rawSampleRgb || extracted.reactionRgb;
-        rawRefRgb = extracted.rawReferenceRgb || extracted.referenceRgb;
-        if (extracted.source === 'html5_canvas') {
-          setTelemetryMode('DYNAMIC OPTICAL SAMPLING (HTML5 Canvas Dual-Zone Pixel Analysis)');
-        } else if (extracted.source === 'jpeg_decoder') {
-          setTelemetryMode('DYNAMIC OPTICAL SAMPLING (Native JPEG Dual-Zone Pixel Analysis)');
+        if (!extracted.isValid || !extracted.rawSampleRgb || !extracted.rawReferenceRgb) {
+          // Decode failure or missing pixels -> NEVER silently substitute predefined positive values!
+          setTelemetryMode(`DYNAMIC OPTICAL SAMPLING: Decode Failure (${extracted.extractionDetails})`);
+          calib = {
+            isCalibrated: false,
+            lightingQuality: 'POOR',
+            rawReferenceRgb: [0, 0, 0],
+            rawReferenceHex: '#000000',
+            gainFactors: { gainR: 1, gainG: 1, gainB: 1, overallIlluminance: 0, colorTemperatureEstimate: 'DAYLIGHT_BALANCED' },
+            rawSampleRgb: [0, 0, 0],
+            rawSampleHex: '#000000',
+            calibratedSampleRgb: [0, 0, 0],
+            calibratedSampleHex: '#000000',
+            illuminantCorrectionApplied: false,
+            notes: extracted.extractionDetails || 'Image decode failure: Pixel telemetry unavailable.',
+            cardValidation: { isValid: false, status: 'CALIBRATION_REQUIRED', reason: 'Pixel extraction failed.' },
+            reactionValidation: { isValid: false, reason: 'Pixel extraction failed.' },
+          };
         } else {
-          setTelemetryMode('FIELD OPTICAL RETICLE TELEMETRY (Dual-Zone Optical Target)');
+          rawSampleRgb = extracted.rawSampleRgb;
+          rawRefRgb = extracted.rawReferenceRgb;
+          if (extracted.source === 'html5_canvas') {
+            setTelemetryMode('DYNAMIC OPTICAL SAMPLING (HTML5 Canvas Dual-Zone Pixel Analysis)');
+          } else if (extracted.source === 'jpeg_decoder') {
+            setTelemetryMode('DYNAMIC OPTICAL SAMPLING (Native JPEG Dual-Zone Pixel Analysis)');
+          } else {
+            setTelemetryMode('FIELD OPTICAL RETICLE TELEMETRY (Dual-Zone Optical Target)');
+          }
+          calib = calibrateSampleWithReferenceCard(
+            rawSampleRgb,
+            rawRefRgb,
+            'gray_18',
+            extracted.refStdDev,
+            extracted.reactionStdDev
+          );
         }
       }
 
-      // 3. Apply In-Frame Reference Card Lighting Calibration
-      const calib = calibrateSampleWithReferenceCard(rawSampleRgb, rawRefRgb, 'gray_18');
       setCalibrationReport(calib);
 
       // 4. Run Automated Classification against Defined Outcome Categories
       const classification = classifyReagentReaction(
-        calib.calibratedSampleRgb,
-        calib.rawSampleRgb,
+        calib.isCalibrated ? calib.calibratedSampleRgb : null,
+        calib.isCalibrated ? calib.rawSampleRgb : null,
         kitId,
         calib.lightingQuality,
         calib.isCalibrated
@@ -543,7 +574,7 @@ export default function CaptureScreen() {
       }
 
       const outcome = classificationResult?.outcomeCategory || 'INCONCLUSIVE';
-      const presumptiveOutcome = classificationResult?.presumptiveOutcome || toPresumptiveOutcome(outcome);
+      const presumptiveOutcome = toPresumptiveOutcome(outcome);
       const substance = classificationResult?.presumptiveSubstance || 'Presumptive (Unanalyzed)';
 
       // 1. Save to local storage (Offline-First Guarantee)
@@ -616,8 +647,8 @@ export default function CaptureScreen() {
   // REVIEW & SAVE SCREEN (Post-Capture / Preset Analysis)
   if (capturedImage) {
     const outcome = classificationResult?.outcomeCategory || 'INCONCLUSIVE';
-    const isPositive = outcome === 'POSITIVE' || outcome === 'PRESUMPTIVE POSITIVE';
-    const isNegative = outcome === 'NEGATIVE' || outcome === 'PRESUMPTIVE NEGATIVE';
+    const isPositive = (outcome as string) === 'POSITIVE' || outcome === 'PRESUMPTIVE POSITIVE';
+    const isNegative = (outcome as string) === 'NEGATIVE' || outcome === 'PRESUMPTIVE NEGATIVE';
     const isInconclusive = !isPositive && !isNegative;
 
     return (
@@ -627,7 +658,10 @@ export default function CaptureScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
-          <ScrollView contentContainerStyle={styles.container}>
+          <ScrollView 
+            contentContainerStyle={[styles.container, isMobile && styles.containerMobile]}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.reviewHeader}>
               <Pressable style={styles.backButton} onPress={handleBack}>
                 <Text style={styles.backButtonText}>‹ Dashboard</Text>
@@ -681,7 +715,9 @@ export default function CaptureScreen() {
                 </View>
                 {classificationResult && (
                   <Text style={styles.confidenceTag}>
-                    Confidence: {(classificationResult.confidenceScore * 100).toFixed(1)}%
+                    {classificationResult.outcomeCategory === 'INCONCLUSIVE'
+                      ? 'No Concordance'
+                      : `Match: ${classificationResult.matchStrength || 'Concordant'} (ΔE*ab = ${classificationResult.deltaE76.toFixed(1)})`}
                   </Text>
                 )}
               </View>
@@ -710,8 +746,17 @@ export default function CaptureScreen() {
                 style={styles.previewImage}
                 resizeMode="cover"
               />
-              <View style={styles.previewOverlayPill}>
-                <Text style={styles.previewOverlayText}>In-Frame Reference Card Calibrated</Text>
+              <View
+                style={[
+                  styles.previewOverlayPill,
+                  !calibrationReport?.isCalibrated && { backgroundColor: 'rgba(220, 38, 38, 0.88)' },
+                ]}
+              >
+                <Text style={styles.previewOverlayText}>
+                  {calibrationReport?.isCalibrated
+                    ? 'In-Frame Reference Card Calibrated'
+                    : 'Reference Card Calibration Required'}
+                </Text>
               </View>
             </View>
 
@@ -722,13 +767,13 @@ export default function CaptureScreen() {
                 <View
                   style={[
                     styles.calibStatusBadge,
-                    calibrationReport?.lightingQuality === 'GOOD'
+                    calibrationReport?.isCalibrated
                       ? styles.calibGood
                       : styles.calibWarn,
                   ]}
                 >
                   <Text style={styles.calibStatusText}>
-                    {calibrationReport?.lightingQuality === 'GOOD' ? 'CALIBRATED' : 'MARGINAL'}
+                    {calibrationReport?.isCalibrated ? 'CALIBRATED' : 'CALIBRATION_REQUIRED'}
                   </Text>
                 </View>
               </View>
@@ -796,9 +841,23 @@ export default function CaptureScreen() {
               </View>
 
               <View style={styles.telemetryRow}>
-                <Text style={styles.telemetryLabel}>Reaction Distance (ΔE)</Text>
-                <Text style={styles.telemetryVal}>
-                  {classificationResult ? `${classificationResult.colorDeltaE.toFixed(1)} units` : '--'}
+                <Text style={styles.telemetryLabel}>CIELAB ΔE*ab (CIE76)</Text>
+                <Text style={[styles.telemetryVal, styles.monoText]}>
+                  {classificationResult?.deltaE76 !== undefined ? `ΔE*ab = ${classificationResult.deltaE76.toFixed(1)}` : '--'}
+                </Text>
+              </View>
+
+              <View style={styles.telemetryRow}>
+                <Text style={styles.telemetryLabel}>Match Strength</Text>
+                <Text style={[styles.telemetryVal, { fontWeight: '700' }]}>
+                  {classificationResult?.matchStrength || '--'}
+                </Text>
+              </View>
+
+              <View style={styles.telemetryRow}>
+                <Text style={styles.telemetryLabel}>Decision Margin</Text>
+                <Text style={[styles.telemetryVal, styles.monoText]}>
+                  {classificationResult?.decisionMargin !== undefined ? `${classificationResult.decisionMargin.toFixed(1)} ΔE units` : '--'}
                 </Text>
               </View>
 
@@ -806,13 +865,6 @@ export default function CaptureScreen() {
                 <Text style={styles.telemetryLabel}>CIELAB Telemetry (D65)</Text>
                 <Text style={[styles.telemetryVal, styles.monoText]}>
                   {classificationResult?.cielabFormatted || calibrationReport?.calibratedCielabFormatted || 'L* --, a* --, b* --'}
-                </Text>
-              </View>
-
-              <View style={styles.telemetryRow}>
-                <Text style={styles.telemetryLabel}>CIELAB ΔE*ab (CIE76)</Text>
-                <Text style={[styles.telemetryVal, styles.monoText]}>
-                  {classificationResult?.deltaE76 !== undefined ? `ΔE*ab = ${classificationResult.deltaE76.toFixed(1)}` : '--'}
                 </Text>
               </View>
 
@@ -938,7 +990,7 @@ export default function CaptureScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F7FA" />
-      <View style={styles.cameraScreenContainer}>
+      <View style={[styles.cameraScreenContainer, isMobile && styles.cameraScreenContainerMobile]}>
         {/* Top Header */}
         <View style={styles.topBar}>
           <Pressable style={styles.backButton} onPress={handleBack}>
@@ -980,7 +1032,7 @@ export default function CaptureScreen() {
         </View>
 
         {/* Sample & Operator Quick Row */}
-        <View style={styles.quickInputsRow}>
+        <View style={[styles.quickInputsRow, isSmallMobile && styles.quickInputsRowMobile]}>
           <View style={styles.quickInputColumn}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={styles.quickInputLabel}>Sample ID:</Text>
@@ -1215,46 +1267,48 @@ export default function CaptureScreen() {
         onRequestClose={() => setIsCardModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Standard Reference Colour Card</Text>
-              <Pressable onPress={() => setIsCardModalVisible(false)} style={styles.modalCloseButton}>
-                <Text style={styles.modalCloseButtonText}>✕</Text>
+          <View style={[styles.modalCard, isMobile && styles.modalCardMobile]}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScrollContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Standard Reference Colour Card</Text>
+                <Pressable onPress={() => setIsCardModalVisible(false)} style={styles.modalCloseButton}>
+                  <Text style={styles.modalCloseButtonText}>✕</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.modalSub}>
+                Display this on a screen or print it out alongside your field test kit for optical lighting calibration.
+              </Text>
+
+              <View style={styles.referenceCardRender}>
+                <View style={styles.referenceCardBrandRow}>
+                  <Text style={styles.referenceCardBrand}>VERITRACE CALIBRATOR</Text>
+                  <Text style={styles.referenceCardVersion}>STD-18% GRAY / REFERENCE STANDARD</Text>
+                </View>
+
+                <View style={styles.patchesGrid}>
+                  {STANDARD_REFERENCE_PATCHES.map((patch, idx) => (
+                    <View key={idx} style={styles.patchItem}>
+                      <View style={[styles.patchColorBox, { backgroundColor: patch.nominalHex }]} />
+                      <Text style={styles.patchName}>{patch.name}</Text>
+                      <Text style={styles.patchHex}>{patch.nominalHex}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                <View style={styles.referenceCardFooter}>
+                  <Text style={styles.referenceCardFootText}>
+                    Keep card on same plane and lighting as test kit reaction.
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                style={styles.primaryButton}
+                onPress={() => setIsCardModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Done</Text>
               </Pressable>
-            </View>
-            <Text style={styles.modalSub}>
-              Display this on a screen or print it out alongside your field test kit for optical lighting calibration.
-            </Text>
-
-            <View style={styles.referenceCardRender}>
-              <View style={styles.referenceCardBrandRow}>
-                <Text style={styles.referenceCardBrand}>VERITRACE CALIBRATOR</Text>
-                <Text style={styles.referenceCardVersion}>STD-18% GRAY / REFERENCE STANDARD</Text>
-              </View>
-
-              <View style={styles.patchesGrid}>
-                {STANDARD_REFERENCE_PATCHES.map((patch, idx) => (
-                  <View key={idx} style={styles.patchItem}>
-                    <View style={[styles.patchColorBox, { backgroundColor: patch.nominalHex }]} />
-                    <Text style={styles.patchName}>{patch.name}</Text>
-                    <Text style={styles.patchHex}>{patch.nominalHex}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <View style={styles.referenceCardFooter}>
-                <Text style={styles.referenceCardFootText}>
-                  Keep card on same plane and lighting as test kit reaction.
-                </Text>
-              </View>
-            </View>
-
-            <Pressable
-              style={styles.primaryButton}
-              onPress={() => setIsCardModalVisible(false)}
-            >
-              <Text style={styles.buttonText}>Done</Text>
-            </Pressable>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1267,7 +1321,7 @@ export default function CaptureScreen() {
         onRequestClose={() => setIsPresetModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, isMobile && styles.modalCardMobile]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Instant Test Case Presets</Text>
               <Pressable onPress={() => setIsPresetModalVisible(false)} style={styles.modalCloseButton}>
@@ -1315,10 +1369,12 @@ export default function CaptureScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
-  container: { padding: 18, paddingBottom: 40 },
+  container: { padding: 20, paddingBottom: 40, width: '100%', maxWidth: 720, alignSelf: 'center' },
+  containerMobile: { padding: 14, paddingBottom: 28 },
   centerContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   loadingText: { color: '#64748B', fontSize: 14, marginTop: 12 },
-  cameraScreenContainer: { flex: 1, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 16, justifyContent: 'space-between' },
+  cameraScreenContainer: { flex: 1, paddingHorizontal: 16, paddingTop: 6, paddingBottom: 16, justifyContent: 'space-between', width: '100%', maxWidth: 720, alignSelf: 'center' },
+  cameraScreenContainerMobile: { paddingHorizontal: 10, paddingBottom: 10, paddingTop: 4 },
 
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   screenHeaderTitle: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
@@ -1341,9 +1397,9 @@ const styles = StyleSheet.create({
   },
   cardHelperButtonText: { color: '#1E293B', fontSize: 13, fontWeight: '700' },
 
-  kitSelectorContainer: { marginBottom: 8 },
+  kitSelectorContainer: { marginBottom: 8, width: '100%', maxWidth: '100%', overflow: 'hidden' },
   kitSelectorTitle: { fontSize: 10, fontWeight: '800', color: '#64748B', letterSpacing: 0.6, marginBottom: 5 },
-  kitPillsScroll: { gap: 8, paddingVertical: 2 },
+  kitPillsScroll: { gap: 8, paddingVertical: 2, flexDirection: 'row' },
   kitPill: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -1365,6 +1421,11 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     padding: 8,
     marginBottom: 6,
+    width: '100%',
+  },
+  quickInputsRowMobile: {
+    flexDirection: 'column',
+    gap: 6,
   },
   quickInputColumn: { flex: 1 },
   quickInputLabel: { fontSize: 11, fontWeight: '600', color: '#475569', marginBottom: 2 },
@@ -1625,33 +1686,37 @@ const styles = StyleSheet.create({
   captureButtonDisabled: { opacity: 0.6 },
   captureButtonInner: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFFFFF' },
   captureButtonLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  helperActionsRow: { flexDirection: 'row', gap: 10, justifyContent: 'center' },
+  helperActionsRow: { flexDirection: 'row', gap: 8, justifyContent: 'center', flexWrap: 'wrap', width: '100%' },
   presetActionButton: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#CBD5E1',
     paddingVertical: 9,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    flex: 1,
+    flexGrow: 1,
+    minWidth: 140,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  presetActionButtonText: { color: '#0F172A', fontSize: 13, fontWeight: '700' },
+  presetActionButtonText: { color: '#0F172A', fontSize: 12, fontWeight: '700' },
   uploadFileLabel: {
     backgroundColor: '#EDF2F7',
     borderWidth: 1,
     borderColor: '#CBD5E1',
     paddingVertical: 9,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: 8,
     color: '#1E293B',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexGrow: 1,
+    minWidth: 110,
   } as any,
 
   // REVIEW SCREEN STYLES
@@ -1769,12 +1834,15 @@ const styles = StyleSheet.create({
   telemetryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
+    flexWrap: 'wrap',
+    gap: 4,
   },
-  telemetryLabel: { fontSize: 12, color: '#64748B' },
-  telemetryVal: { fontSize: 12, fontWeight: '600', color: '#0F172A' },
+  telemetryLabel: { fontSize: 12, color: '#64748B', flexShrink: 0 },
+  telemetryVal: { fontSize: 12, fontWeight: '600', color: '#0F172A', textAlign: 'right', flexShrink: 1 },
   gpsText: { color: '#047857' },
   monoText: { fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', fontSize: 11 },
 
@@ -1813,6 +1881,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
@@ -1824,6 +1893,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
   },
   secondaryButtonText: { color: '#1E293B', fontSize: 14, fontWeight: '600' },
 
@@ -1833,11 +1903,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   modalCard: {
     width: '100%',
     maxWidth: 520,
+    maxHeight: '90%',
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     padding: 20,
@@ -1846,6 +1917,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 5,
+  },
+  modalCardMobile: {
+    padding: 14,
+    maxWidth: '94%',
+  },
+  modalScrollContent: {
+    paddingBottom: 4,
   },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   modalTitle: { fontSize: 17, fontWeight: '800', color: '#0F172A' },

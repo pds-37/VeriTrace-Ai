@@ -75,9 +75,11 @@ export interface ReagentClassificationResult {
   outcomeCategory: PresumptiveOutcomeLabel;
   presumptiveSubstance: string;
   matchedProfileId?: string;
-  confidenceScore: number; // 0.0 to 1.0 (100%)
+  confidenceScore: number; // Stored numeric score for database/HMAC signature compatibility
   colorDeltaE: number; // Euclidean color distance in calibrated RGB space (baseline classifier)
   deltaE76: number; // Standardized CIE76 ΔE*ab in CIELAB space (analytical telemetry)
+  matchStrength: 'STRONG' | 'MODERATE' | 'WEAK' | 'NONE'; // Transparent forensic match concordance
+  decisionMargin: number; // Distance separation between best profile and baseline in CIELAB units
   cielab: CielabColor; // Calibrated reaction CIELAB (L*, a*, b*)
   cielabFormatted: string; // Formatted "L*=..., a*=..., b*=..."
   rawCielab: CielabColor;
@@ -317,41 +319,48 @@ export function calculateColorDistance(
  * 4. If color does not match any known positive or negative profile within allowable tolerance -> INCONCLUSIVE.
  */
 export function classifyReagentReaction(
-  calibratedRgb: [number, number, number],
-  rawRgb: [number, number, number],
+  calibratedRgb: [number, number, number] | null,
+  rawRgb: [number, number, number] | null,
   kitId: string = 'scott',
-  lightingQuality: 'GOOD' | 'MARGINAL' | 'POOR' = 'GOOD'
+  lightingQuality: 'GOOD' | 'MARGINAL' | 'POOR' = 'GOOD',
+  isCalibrated: boolean = true
 ): ReagentClassificationResult {
-  const hex = `#${calibratedRgb.map(c => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
-
   const kit = REAGENT_KITS.find(k => k.id === kitId) || REAGENT_KITS[0];
-
   const disclaimer = 'Presumptive field test result only. Does not replace laboratory confirmatory testing (GC-MS / HPLC).';
 
-  // Compute CIELAB representations
-  const calLab = rgbToCielab(calibratedRgb);
-  const rawLab = rgbToCielab(rawRgb);
+  const safeCalRgb: [number, number, number] = calibratedRgb || [0, 0, 0];
+  const safeRawRgb: [number, number, number] = rawRgb || [0, 0, 0];
+
+  const calLab = rgbToCielab(safeCalRgb);
+  const rawLab = rgbToCielab(safeRawRgb);
+  const hex = `#${safeCalRgb.map(c => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
   const cielabFormatted = formatCielab(calLab);
 
-  // 1. Guardrail against poor or uncalibrated ambient lighting
-  if (lightingQuality === 'POOR') {
+  // 1. Critical Integrity Guardrail: Reference card must be verified and illumination valid
+  if (!isCalibrated || lightingQuality === 'POOR' || !calibratedRgb || !rawRgb) {
     return {
       kitId: kit.id,
       kitName: kit.name,
       outcomeCategory: 'INCONCLUSIVE',
-      presumptiveSubstance: 'Inconclusive (Degraded Illumination)',
-      confidenceScore: 0.35,
+      presumptiveSubstance: !isCalibrated
+        ? 'Inconclusive (Reference Card Calibration Required)'
+        : 'Inconclusive (Degraded Illumination)',
+      confidenceScore: 0,
       colorDeltaE: 99.9,
       deltaE76: 99.9,
+      matchStrength: 'NONE',
+      decisionMargin: 0,
       cielab: calLab,
       cielabFormatted,
       rawCielab: rawLab,
-      calibratedRgb,
+      calibratedRgb: safeCalRgb,
       calibratedHex: hex,
-      rawRgb,
-      lightingQuality,
+      rawRgb: safeRawRgb,
+      lightingQuality: isCalibrated ? lightingQuality : 'POOR',
       calibrationStatus: 'CALIBRATION_REQUIRED',
-      notes: 'Ambient illumination was outside valid operational limits (too dark, clipped, or extreme color cast). Recalibrate with reference card under steady lighting.',
+      notes: !isCalibrated
+        ? 'Reference card calibration is invalid or unverified. Presumptive substance classification cannot be performed without a valid in-frame reference card.'
+        : 'Ambient illumination was outside valid operational limits. Recalibrate with reference card under steady lighting.',
       disclaimer,
     };
   }
@@ -360,32 +369,55 @@ export function classifyReagentReaction(
   let bestProfile: ReagentReactionProfile | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
   let bestNormDistance = Number.POSITIVE_INFINITY;
+  let bestLabDeltaE = Number.POSITIVE_INFINITY;
 
   for (const profile of kit.profiles) {
-    const dist = calculateColorDistance(calibratedRgb, profile.targetRgb);
-    if (dist.euclidean < bestDistance) {
+    const dist = calculateColorDistance(safeCalRgb, profile.targetRgb);
+    const profileLab = rgbToCielab(profile.targetRgb);
+    const labDeltaE = calculateDeltaE76(calLab, profileLab);
+
+    if (labDeltaE < bestLabDeltaE) {
       bestDistance = dist.euclidean;
       bestNormDistance = dist.normalizedDistance;
       bestProfile = profile;
+      bestLabDeltaE = labDeltaE;
     }
   }
 
   // Also check baseline unreacted reagent distance
-  const baselineDist = calculateColorDistance(calibratedRgb, kit.baselineReagentRgb);
+  const baselineDist = calculateColorDistance(safeCalRgb, kit.baselineReagentRgb);
+  const baselineLab = rgbToCielab(kit.baselineReagentRgb);
+  const baselineLabDeltaE = calculateDeltaE76(calLab, baselineLab);
 
-  // Maximum acceptable color distance thresholds
-  // In RGB space (max theoretical dist ~441), a distance <= 95 indicates a strong colorimetric match
-  const POSITIVE_DISTANCE_THRESHOLD = 110;
-  const NEGATIVE_DISTANCE_THRESHOLD = 90;
+  // Decision margin: separation between baseline and best target in CIELAB units
+  const decisionMargin = Math.round(Math.abs(baselineLabDeltaE - bestLabDeltaE) * 10) / 10;
 
-  if (bestProfile && (bestProfile.category === 'POSITIVE' || bestProfile.category === 'PRESUMPTIVE POSITIVE') && bestDistance <= POSITIVE_DISTANCE_THRESHOLD) {
-    // Calibrated reaction matches positive profile
-    // Confidence scaled inversely from distance: dist=0 -> 98%, dist=POSITIVE_DISTANCE_THRESHOLD -> 70%
-    const distRatio = Math.max(0, Math.min(1, bestDistance / POSITIVE_DISTANCE_THRESHOLD));
-    const confidence = Math.round((0.98 - distRatio * 0.28) * 100) / 100;
-    const profileLab = rgbToCielab(bestProfile.targetRgb);
-    const deltaE76 = calculateDeltaE76(calLab, profileLab);
+  // Standard forensic match strength thresholds (CIELAB ΔE*ab):
+  // ΔE*ab <= 12: Strong colorimetric concordance
+  // ΔE*ab <= 22: Moderate colorimetric concordance
+  // ΔE*ab <= 35: Weak concordance
+  // ΔE*ab > 35: Non-concordant / Ambiguous
+  const matchStrength: 'STRONG' | 'MODERATE' | 'WEAK' | 'NONE' =
+    bestLabDeltaE <= 12 ? 'STRONG' : bestLabDeltaE <= 22 ? 'MODERATE' : bestLabDeltaE <= 35 ? 'WEAK' : 'NONE';
+
+  // Strict Decision Thresholds:
+  // In CIELAB space, ΔE*ab <= 22 indicates a genuine chemical reaction color match.
+  // In RGB space, require ΔE_rgb <= 60 to prevent arbitrary dark surfaces/shadows from matching.
+  // Also require decision margin >= 8 to ensure reaction is clearly distinct from unreacted reagent.
+  const POSITIVE_LAB_THRESHOLD = 22;
+  const POSITIVE_RGB_THRESHOLD = 60;
+  const NEGATIVE_LAB_THRESHOLD = 18;
+  const NEGATIVE_RGB_THRESHOLD = 50;
+
+  if (
+    bestProfile &&
+    (bestProfile.category === 'POSITIVE' || bestProfile.category === 'PRESUMPTIVE POSITIVE') &&
+    bestLabDeltaE <= POSITIVE_LAB_THRESHOLD &&
+    bestDistance <= POSITIVE_RGB_THRESHOLD &&
+    decisionMargin >= 8
+  ) {
     const calStatus: 'CALIBRATED' | 'CALIBRATION_REQUIRED' = bestProfile.calibrationStatus || 'CALIBRATED';
+    const confidence = matchStrength === 'STRONG' ? 0.95 : 0.80;
 
     return {
       kitId: kit.id,
@@ -395,71 +427,76 @@ export function classifyReagentReaction(
       matchedProfileId: bestProfile.id,
       confidenceScore: confidence,
       colorDeltaE: bestDistance,
-      deltaE76,
+      deltaE76: bestLabDeltaE,
+      matchStrength,
+      decisionMargin,
       cielab: calLab,
       cielabFormatted,
       rawCielab: rawLab,
-      calibratedRgb,
+      calibratedRgb: safeCalRgb,
       calibratedHex: hex,
-      rawRgb,
+      rawRgb: safeRawRgb,
       lightingQuality,
       calibrationStatus: calStatus,
-      notes: `Distinct colorimetric match for ${bestProfile.substanceName}. Calibrated reaction color ${hex} closely aligns with reference spectrum (ΔE_rgb = ${bestDistance.toFixed(1)}, ΔE*ab = ${deltaE76.toFixed(1)}).`,
+      notes: `Distinct colorimetric match for ${bestProfile.substanceName}. Calibrated reaction color ${hex} closely aligns with reference spectrum (ΔE*ab = ${bestLabDeltaE.toFixed(1)}, Match: ${matchStrength}, Decision Margin: ${decisionMargin.toFixed(1)} ΔE units).`,
       disclaimer,
     };
   }
 
-  if (baselineDist.euclidean <= NEGATIVE_DISTANCE_THRESHOLD || (bestProfile && (bestProfile.category === 'NEGATIVE' || bestProfile.category === 'PRESUMPTIVE NEGATIVE') && bestDistance <= NEGATIVE_DISTANCE_THRESHOLD)) {
-    // Calibrated color matches baseline unreacted reagent
-    const distRatio = Math.max(0, Math.min(1, baselineDist.euclidean / NEGATIVE_DISTANCE_THRESHOLD));
-    const confidence = Math.round((0.96 - distRatio * 0.25) * 100) / 100;
-    const baselineLab = rgbToCielab(kit.baselineReagentRgb);
-    const deltaE76 = calculateDeltaE76(calLab, baselineLab);
-
+  if (
+    (baselineLabDeltaE <= NEGATIVE_LAB_THRESHOLD && baselineDist.euclidean <= NEGATIVE_RGB_THRESHOLD) ||
+    (bestProfile &&
+      (bestProfile.category === 'NEGATIVE' || bestProfile.category === 'PRESUMPTIVE NEGATIVE') &&
+      bestLabDeltaE <= NEGATIVE_LAB_THRESHOLD)
+  ) {
     return {
       kitId: kit.id,
       kitName: kit.name,
       outcomeCategory: 'PRESUMPTIVE NEGATIVE',
       presumptiveSubstance: 'Negative / No Reaction',
-      matchedProfileId: (bestProfile?.category === 'NEGATIVE' || bestProfile?.category === 'PRESUMPTIVE NEGATIVE') ? bestProfile.id : undefined,
-      confidenceScore: confidence,
+      matchedProfileId:
+        bestProfile?.category === 'NEGATIVE' || bestProfile?.category === 'PRESUMPTIVE NEGATIVE'
+          ? bestProfile.id
+          : undefined,
+      confidenceScore: 0.95,
       colorDeltaE: baselineDist.euclidean,
-      deltaE76,
+      deltaE76: baselineLabDeltaE,
+      matchStrength: 'STRONG',
+      decisionMargin,
       cielab: calLab,
       cielabFormatted,
       rawCielab: rawLab,
-      calibratedRgb,
+      calibratedRgb: safeCalRgb,
       calibratedHex: hex,
-      rawRgb,
+      rawRgb: safeRawRgb,
       lightingQuality,
       calibrationStatus: 'CALIBRATED',
-      notes: `No diagnostic colorimetric shift detected. Calibrated color ${hex} matches unreacted reagent baseline (${kit.baselineDescription}, ΔE*ab = ${deltaE76.toFixed(1)}).`,
+      notes: `No diagnostic colorimetric shift detected. Calibrated color ${hex} matches unreacted reagent baseline (${kit.baselineDescription}, ΔE*ab = ${baselineLabDeltaE.toFixed(1)}).`,
       disclaimer,
     };
   }
 
-  // 3. Fallback: Colorimetric shift does not align cleanly with either known positive or negative profile
-  const nearestLab = bestProfile ? rgbToCielab(bestProfile.targetRgb) : calLab;
-  const deltaE76 = calculateDeltaE76(calLab, nearestLab);
-
+  // 3. Ambiguous Reaction / Outside Tolerance
   return {
     kitId: kit.id,
     kitName: kit.name,
     outcomeCategory: 'INCONCLUSIVE',
     presumptiveSubstance: 'Inconclusive / Ambiguous Reaction',
     matchedProfileId: bestProfile?.id,
-    confidenceScore: 0.45,
+    confidenceScore: 0,
     colorDeltaE: bestDistance,
-    deltaE76,
+    deltaE76: bestLabDeltaE,
+    matchStrength: 'NONE',
+    decisionMargin,
     cielab: calLab,
     cielabFormatted,
     rawCielab: rawLab,
-    calibratedRgb,
+    calibratedRgb: safeCalRgb,
     calibratedHex: hex,
-    rawRgb,
+    rawRgb: safeRawRgb,
     lightingQuality,
     calibrationStatus: 'CALIBRATION_REQUIRED',
-    notes: `Measured colorimetric profile ${hex} is atypical for ${kit.name} (ΔE_rgb = ${bestDistance.toFixed(1)}, ΔE*ab = ${deltaE76.toFixed(1)} to nearest reference). Reaction is ambiguous or adulterated. Confirmatory lab test required.`,
+    notes: `Measured colorimetric profile ${hex} is outside valid match tolerance for ${kit.name} (ΔE*ab = ${bestLabDeltaE.toFixed(1)}, ΔE_rgb = ${bestDistance.toFixed(1)}). Reaction is ambiguous or adulterated. Confirmatory lab testing required.`,
     disclaimer,
   };
 }

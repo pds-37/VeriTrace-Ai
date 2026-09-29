@@ -69,6 +69,17 @@ export interface CalibrationGainFactors {
   colorTemperatureEstimate: 'WARM_TUNGSTEN' | 'DAYLIGHT_BALANCED' | 'COOL_FLUORESCENT';
 }
 
+export interface CardValidationReport {
+  isValid: boolean;
+  status: 'CALIBRATED' | 'CALIBRATION_REQUIRED';
+  reason: string;
+}
+
+export interface ReactionValidationReport {
+  isValid: boolean;
+  reason: string;
+}
+
 export interface CalibrationReport {
   isCalibrated: boolean;
   lightingQuality: 'GOOD' | 'MARGINAL' | 'POOR';
@@ -83,6 +94,8 @@ export interface CalibrationReport {
   calibratedCielabFormatted?: string;
   illuminantCorrectionApplied: boolean;
   notes: string;
+  cardValidation?: CardValidationReport;
+  reactionValidation?: ReactionValidationReport;
 }
 
 /**
@@ -102,6 +115,131 @@ export function clampRgb(rgb: [number, number, number]): [number, number, number
 export function rgbToHex(rgb: [number, number, number]): string {
   const [r, g, b] = clampRgb(rgb);
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`.toUpperCase();
+}
+
+/**
+ * Validates the in-frame reference card patch for neutral gray spectral balance,
+ * operational exposure limits, and spatial texture uniformity.
+ */
+export function validateReferenceCardPatch(
+  refRgb: [number, number, number],
+  stdDev?: number
+): CardValidationReport {
+  if (!refRgb || (refRgb[0] === 0 && refRgb[1] === 0 && refRgb[2] === 0)) {
+    return {
+      isValid: false,
+      status: 'CALIBRATION_REQUIRED',
+      reason: 'Reference card missing: No optical signal detected in card reticle.',
+    };
+  }
+
+  const [r, g, b] = refRgb;
+  const illuminance = 0.299 * r + 0.587 * g + 0.114 * b;
+
+  // 1. Exposure limits for an 18% neutral gray card under operational field lighting
+  if (illuminance < 35) {
+    return {
+      isValid: false,
+      status: 'CALIBRATION_REQUIRED',
+      reason: `Reference region severely underexposed (luminance ${illuminance.toFixed(0)} < 35). Reference card cannot be verified in darkness.`,
+    };
+  }
+  if (illuminance > 235) {
+    return {
+      isValid: false,
+      status: 'CALIBRATION_REQUIRED',
+      reason: `Reference region saturated by glare (luminance ${illuminance.toFixed(0)} > 235). Angle sensor to eliminate glare.`,
+    };
+  }
+
+  // 2. Gray Neutrality Check:
+  // An 18% neutral gray card reflects R, G, B equally across the spectrum.
+  // Real field illuminants (2500K warm incandescent to 7500K cool shade) induce moderate chromatic cast.
+  // Strongly chromatic surfaces (green desks, blue folders, wood tables, red carpet) exhibit extreme channel divergence.
+  const sum = r + g + b || 1;
+  const normR = r / sum;
+  const normG = g / sum;
+  const normB = b / sum;
+
+  const maxChromaDev = Math.max(
+    Math.abs(normR - 0.3333),
+    Math.abs(normG - 0.3333),
+    Math.abs(normB - 0.3333)
+  );
+
+  if (maxChromaDev > 0.11) {
+    return {
+      isValid: false,
+      status: 'CALIBRATION_REQUIRED',
+      reason: `Reference region lacks neutral gray chromaticity (chromatic deviation ${(maxChromaDev * 100).toFixed(1)}% exceeds 11% field tolerance). Non-gray surface detected.`,
+    };
+  }
+
+  const channelSpread = Math.max(r, g, b) - Math.min(r, g, b);
+  if (channelSpread > 60) {
+    return {
+      isValid: false,
+      status: 'CALIBRATION_REQUIRED',
+      reason: `Reference region channel variance too high (spread ${channelSpread} > 60). Valid neutral gray reference card not detected.`,
+    };
+  }
+
+  // 3. Patch Uniformity Check: Reference card patches are flat, uniform surfaces.
+  if (stdDev !== undefined && stdDev > 26) {
+    return {
+      isValid: false,
+      status: 'CALIBRATION_REQUIRED',
+      reason: `Reference region exhibits high spatial clutter/texture (σ = ${stdDev.toFixed(1)} > 26). Uniform card patch not detected.`,
+    };
+  }
+
+  return {
+    isValid: true,
+    status: 'CALIBRATED',
+    reason: 'Valid neutral reference card verified within operational tolerances.',
+  };
+}
+
+/**
+ * Validates the reaction zone for basic optical presence and contrast against background.
+ */
+export function validateReactionRegion(
+  reactionRgb: [number, number, number],
+  refRgb: [number, number, number],
+  stdDev?: number
+): ReactionValidationReport {
+  if (!reactionRgb) {
+    return { isValid: false, reason: 'Reaction region data missing.' };
+  }
+
+  const [r, g, b] = reactionRgb;
+  const illuminance = 0.299 * r + 0.587 * g + 0.114 * b;
+
+  if (illuminance < 15) {
+    return { isValid: false, reason: 'Reaction region unlit (illuminance < 15).' };
+  }
+
+  // Check contrast between reference zone and reaction zone:
+  // If the user captures an arbitrary flat scene (e.g. blank wall, empty desk, carpet)
+  // where the reaction box has the same color as the reference box:
+  const dR = r - refRgb[0];
+  const dG = g - refRgb[1];
+  const dB = b - refRgb[2];
+  const distToRef = Math.sqrt(dR * dR + dG * dG + dB * dB);
+
+  // In real field test setups (Scott, Marquis, Duquenois, etc.), the reaction sample
+  // has a distinct optical presence compared to the neutral 18% gray card (dist >= 12).
+  if (distToRef < 12) {
+    return {
+      isValid: false,
+      reason: `Reaction zone does not exhibit optical contrast with reference zone (ΔE = ${distToRef.toFixed(1)} < 12). Uniform background without reaction vessel detected.`,
+    };
+  }
+
+  return {
+    isValid: true,
+    reason: 'Valid reaction optical signal detected.',
+  };
 }
 
 /**
@@ -142,12 +280,12 @@ export function computeIlluminantGains(
   let quality: 'GOOD' | 'MARGINAL' | 'POOR' = 'GOOD';
   let notes = 'Lighting conditions are optimal. Illumination calibration active.';
 
-  if (illuminance < 28) {
+  if (illuminance < 35) {
     quality = 'POOR';
-    notes = 'Severe underexposure: Ambient lighting is too dark (< 28/255) for accurate colorimetry.';
-  } else if (illuminance > 248) {
+    notes = 'Severe underexposure: Ambient lighting is too dark (< 35/255) for accurate colorimetry.';
+  } else if (illuminance > 240) {
     quality = 'POOR';
-    notes = 'Sensor saturation: Direct glare or intense overexposure detected (> 248/255).';
+    notes = 'Sensor saturation: Direct glare or intense overexposure detected (> 240/255).';
   } else if (illuminance < 60 || illuminance > 220 || gainR > 2.2 || gainB > 2.2) {
     quality = 'MARGINAL';
     notes = `Marginal lighting: Strong ${colorTemp.toLowerCase().replace('_', ' ')} color cast normalized via reference card.`;
@@ -172,9 +310,17 @@ export function computeIlluminantGains(
 export function calibrateSampleWithReferenceCard(
   rawSampleRgb: [number, number, number],
   rawReferenceRgb: [number, number, number],
-  referenceType: 'gray_18' | 'white_90' = 'gray_18'
+  referenceType: 'gray_18' | 'white_90' = 'gray_18',
+  refStdDev?: number,
+  sampleStdDev?: number
 ): CalibrationReport {
+  const cardValidation = validateReferenceCardPatch(rawReferenceRgb, refStdDev);
+  const reactionValidation = validateReactionRegion(rawSampleRgb, rawReferenceRgb, sampleStdDev);
+
   const { gains, lightingQuality, notes } = computeIlluminantGains(rawReferenceRgb, referenceType);
+
+  // Calibration is declared valid ONLY if reference card validation passed AND lighting is not POOR
+  const isCalibrated = cardValidation.isValid && lightingQuality !== 'POOR';
 
   // Apply gains with chromatic adaptation
   const calibratedR = Math.min(255, Math.max(0, rawSampleRgb[0] * gains.gainR));
@@ -184,9 +330,15 @@ export function calibrateSampleWithReferenceCard(
   const calibratedRgb: [number, number, number] = clampRgb([calibratedR, calibratedG, calibratedB]);
   const calLab = rgbToCielab(calibratedRgb);
 
+  const combinedNotes = !cardValidation.isValid
+    ? cardValidation.reason
+    : !reactionValidation.isValid
+    ? reactionValidation.reason
+    : notes;
+
   return {
-    isCalibrated: true,
-    lightingQuality,
+    isCalibrated,
+    lightingQuality: isCalibrated ? lightingQuality : 'POOR',
     rawReferenceRgb,
     rawReferenceHex: rgbToHex(rawReferenceRgb),
     gainFactors: gains,
@@ -196,8 +348,10 @@ export function calibrateSampleWithReferenceCard(
     calibratedSampleHex: rgbToHex(calibratedRgb),
     calibratedCielab: calLab,
     calibratedCielabFormatted: formatCielab(calLab),
-    illuminantCorrectionApplied: true,
-    notes,
+    illuminantCorrectionApplied: isCalibrated,
+    notes: combinedNotes,
+    cardValidation,
+    reactionValidation,
   };
 }
 
@@ -289,13 +443,16 @@ export const DEMO_BENCHMARK_PRESETS: DemoBenchmarkPreset[] = [
 ];
 
 export interface DualZoneExtractionResult {
-  rawSampleRgb: [number, number, number];
-  rawReferenceRgb: [number, number, number];
-  reactionRgb: [number, number, number];
-  referenceRgb: [number, number, number];
+  rawSampleRgb: [number, number, number] | null;
+  rawReferenceRgb: [number, number, number] | null;
+  reactionRgb: [number, number, number] | null;
+  referenceRgb: [number, number, number] | null;
   source: 'html5_canvas' | 'jpeg_decoder' | 'optical_estimate';
-  extractionMethod: 'dynamic_dual_zone_pixel_sampling' | 'calibrated_fallback';
+  extractionMethod: 'dynamic_dual_zone_pixel_sampling' | 'failed';
   extractionDetails: string;
+  isValid: boolean;
+  refStdDev?: number;
+  reactionStdDev?: number;
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -311,35 +468,66 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-function sampleAverageRgb(
+/**
+ * Samples pixel telemetry from a bounding box and computes mean RGB and standard deviation.
+ */
+export function sampleBoxWithStats(
   data: Uint8Array | Uint8ClampedArray,
   width: number,
   height: number,
   box: { x1: number; y1: number; x2: number; y2: number }
-): [number, number, number] {
+): { meanRgb: [number, number, number]; stdDev: number; count: number } {
   let totalR = 0, totalG = 0, totalB = 0, count = 0;
   const startX = Math.max(0, Math.floor(box.x1 * width));
   const endX = Math.min(width, Math.ceil(box.x2 * width));
   const startY = Math.max(0, Math.floor(box.y1 * height));
   const endY = Math.min(height, Math.ceil(box.y2 * height));
 
+  const sampledLums: number[] = [];
+
   for (let y = startY; y < endY; y += 2) {
     const rowOffset = y * width * 4;
     for (let x = startX; x < endX; x += 2) {
       const idx = rowOffset + x * 4;
-      totalR += data[idx];
-      totalG += data[idx + 1];
-      totalB += data[idx + 2];
+      const r = data[idx];
+      const g = data[idx + 1];
+      const b = data[idx + 2];
+      totalR += r;
+      totalG += g;
+      totalB += b;
+      sampledLums.push(0.299 * r + 0.587 * g + 0.114 * b);
       count++;
     }
   }
 
-  if (count === 0) return [128, 128, 128];
-  return [
-    Math.round(totalR / count),
-    Math.round(totalG / count),
-    Math.round(totalB / count),
-  ];
+  if (count === 0) return { meanRgb: [0, 0, 0], stdDev: 0, count: 0 };
+
+  const meanR = Math.round(totalR / count);
+  const meanG = Math.round(totalG / count);
+  const meanB = Math.round(totalB / count);
+  const meanLum = 0.299 * meanR + 0.587 * meanG + 0.114 * meanB;
+
+  let varianceSum = 0;
+  for (let i = 0; i < sampledLums.length; i++) {
+    const diff = sampledLums[i] - meanLum;
+    varianceSum += diff * diff;
+  }
+  const stdDev = Math.round(Math.sqrt(varianceSum / count) * 10) / 10;
+
+  return {
+    meanRgb: [meanR, meanG, meanB],
+    stdDev,
+    count,
+  };
+}
+
+export function sampleAverageRgb(
+  data: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+  box: { x1: number; y1: number; x2: number; y2: number }
+): [number, number, number] {
+  return sampleBoxWithStats(data, width, height, box).meanRgb;
 }
 
 /**
@@ -359,7 +547,12 @@ export async function extractDualZoneColorsAsync(
   if (Platform.OS === 'web' && typeof document !== 'undefined' && typeof window !== 'undefined') {
     try {
       const src = imageUri.startsWith('data:') ? imageUri : (base64Data ? `data:image/jpeg;base64,${base64Data}` : imageUri);
-      const measured = await new Promise<{ rawSample: [number, number, number]; rawRef: [number, number, number] } | null>((resolve) => {
+      const measured = await new Promise<{
+        rawSample: [number, number, number];
+        rawRef: [number, number, number];
+        refStdDev: number;
+        reactionStdDev: number;
+      } | null>((resolve) => {
         const img = new (window as any).Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
@@ -371,9 +564,14 @@ export async function extractDualZoneColorsAsync(
             if (!ctx) return resolve(null);
             ctx.drawImage(img, 0, 0);
             const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const rawRef = sampleAverageRgb(imgData.data, canvas.width, canvas.height, refBox);
-            const rawSample = sampleAverageRgb(imgData.data, canvas.width, canvas.height, reactionBox);
-            resolve({ rawSample, rawRef });
+            const refStats = sampleBoxWithStats(imgData.data, canvas.width, canvas.height, refBox);
+            const reactStats = sampleBoxWithStats(imgData.data, canvas.width, canvas.height, reactionBox);
+            resolve({
+              rawSample: reactStats.meanRgb,
+              rawRef: refStats.meanRgb,
+              refStdDev: refStats.stdDev,
+              reactionStdDev: reactStats.stdDev,
+            });
           } catch {
             resolve(null);
           }
@@ -391,6 +589,9 @@ export async function extractDualZoneColorsAsync(
           source: 'html5_canvas',
           extractionMethod: 'dynamic_dual_zone_pixel_sampling',
           extractionDetails: 'Real-time pixel sampling via HTML5 Canvas dual-zone reticle.',
+          isValid: true,
+          refStdDev: measured.refStdDev,
+          reactionStdDev: measured.reactionStdDev,
         };
       }
     } catch (e) {
@@ -405,40 +606,36 @@ export async function extractDualZoneColorsAsync(
       const bytes = base64ToUint8Array(cleanBase64);
       const decoded = jpeg.decode(bytes, { useTArray: true, formatAsRGBA: true });
       if (decoded && decoded.width && decoded.height && decoded.data) {
-        const rawRef = sampleAverageRgb(decoded.data, decoded.width, decoded.height, refBox);
-        const rawSample = sampleAverageRgb(decoded.data, decoded.width, decoded.height, reactionBox);
+        const refStats = sampleBoxWithStats(decoded.data, decoded.width, decoded.height, refBox);
+        const reactStats = sampleBoxWithStats(decoded.data, decoded.width, decoded.height, reactionBox);
         return {
-          rawSampleRgb: rawSample,
-          rawReferenceRgb: rawRef,
-          reactionRgb: rawSample,
-          referenceRgb: rawRef,
+          rawSampleRgb: reactStats.meanRgb,
+          rawReferenceRgb: refStats.meanRgb,
+          reactionRgb: reactStats.meanRgb,
+          referenceRgb: refStats.meanRgb,
           source: 'jpeg_decoder',
           extractionMethod: 'dynamic_dual_zone_pixel_sampling',
           extractionDetails: `Decoded ${decoded.width}x${decoded.height} JPEG frame via jpeg-js dual-zone reticle.`,
+          isValid: true,
+          refStdDev: refStats.stdDev,
+          reactionStdDev: reactStats.stdDev,
         };
       }
     } catch (decodeErr) {
-      console.warn('Native jpeg-js decode fallback:', decodeErr);
+      console.warn('Native jpeg-js decode error:', decodeErr);
     }
   }
 
-  // 3. Fallback baseline if image bytes cannot be decoded
-  const fallbackSample: [number, number, number] = fallbackKitId === 'scott'
-    ? [15, 68, 168]
-    : fallbackKitId === 'marquis'
-    ? [74, 12, 126]
-    : fallbackKitId === 'duquenois_levine'
-    ? [56, 30, 92]
-    : [0, 102, 105];
-
+  // 3. Explicit decode failure — NEVER substitute predefined positive reagent colors in live mode!
   return {
-    rawSampleRgb: fallbackSample,
-    rawReferenceRgb: [128, 128, 128],
-    reactionRgb: fallbackSample,
-    referenceRgb: [128, 128, 128],
+    rawSampleRgb: null,
+    rawReferenceRgb: null,
+    reactionRgb: null,
+    referenceRgb: null,
     source: 'optical_estimate',
-    extractionMethod: 'calibrated_fallback',
-    extractionDetails: 'Calibrated spectral baseline fallback applied.',
+    extractionMethod: 'failed',
+    extractionDetails: 'Image decoding failed: Pixel telemetry unavailable from captured frame.',
+    isValid: false,
   };
 }
 

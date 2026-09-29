@@ -6,6 +6,7 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -130,6 +131,9 @@ const SUPPORTED_KITS = [
 
 export default function AboutScreen() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const isMobile = windowWidth <= 768;
+  const isSmallMobile = windowWidth <= 360;
   const [expandedFaq, setExpandedFaq] = useState<string | null>('q1');
 
   const toggleFaq = (id: string) => {
@@ -138,20 +142,27 @@ export default function AboutScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={[styles.container, isMobile && styles.containerMobile]} 
+        showsVerticalScrollIndicator={false}
+      >
         {/* HERO SECTION */}
-        <View style={styles.heroSection}>
-          <View style={styles.heroRow}>
+        <View style={[styles.heroSection, isMobile && styles.heroSectionMobile]}>
+          <View style={[styles.heroRow, isMobile && styles.heroRowMobile]}>
             {/* Left Column: Mission & Identity */}
-            <View style={styles.heroLeftCol}>
+            <View style={[styles.heroLeftCol, isMobile ? styles.heroColMobile : styles.heroLeftColDesktop]}>
               <View style={styles.badgePill}>
                 <View style={styles.badgeDot} />
                 <Text style={styles.badgeText}>SIH 2026 • SIH26231 • TEAM DOOMDAY</Text>
               </View>
 
               <Text style={styles.heroEyebrow}>OBJECTIVE OPTICAL TELEMETRY & DIGITAL CHAIN OF CUSTODY</Text>
-              <Text style={styles.heroTitleMain}>FIELD TEST.</Text>
-              <Text style={styles.heroTitleAccent}>DIGITAL EVIDENCE.</Text>
+              <Text style={[styles.heroTitleMain, isMobile && styles.heroTitleMainMobile, isSmallMobile && styles.heroTitleMainSmallMobile]}>
+                FIELD TEST.
+              </Text>
+              <Text style={[styles.heroTitleAccent, isMobile && styles.heroTitleAccentMobile, isSmallMobile && styles.heroTitleAccentSmallMobile]}>
+                DIGITAL EVIDENCE.
+              </Text>
               <Text style={styles.heroBrandName}>VeriTrace AI</Text>
 
               <Text style={styles.heroSubtitle}>
@@ -163,9 +174,9 @@ export default function AboutScreen() {
               </Text>
 
               {/* Primary Call to Actions */}
-              <View style={styles.heroCtaRow}>
+              <View style={[styles.heroCtaRow, isMobile && styles.heroCtaRowMobile]}>
                 <Pressable
-                  style={styles.primaryCta}
+                  style={[styles.primaryCta, isMobile && styles.ctaButtonMobile]}
                   onPress={() => router.push('/capture')}
                   accessibilityRole="button"
                   accessibilityLabel="Launch Field Test"
@@ -173,7 +184,7 @@ export default function AboutScreen() {
                   <Text style={styles.primaryCtaText}>Launch Field Test →</Text>
                 </Pressable>
                 <Pressable
-                  style={styles.secondaryCta}
+                  style={[styles.secondaryCta, isMobile && styles.ctaButtonMobile]}
                   onPress={() => router.push('/two')}
                   accessibilityRole="button"
                   accessibilityLabel="Explore Records"
@@ -200,7 +211,7 @@ export default function AboutScreen() {
             </View>
 
             {/* Right Column: Visual Optical Evidence Preview */}
-            <View style={styles.heroRightCol}>
+            <View style={[styles.heroRightCol, isMobile ? styles.heroColMobile : styles.heroRightColDesktop]}>
               <View style={styles.previewEvidenceCard}>
                 {/* Preview Header */}
                 <View style={styles.previewHeaderRow}>
@@ -313,9 +324,9 @@ export default function AboutScreen() {
           <Text style={styles.sectionTitle}>The Field Challenge vs. The VeriTrace Approach</Text>
         </View>
 
-        <View style={styles.twoColGrid}>
+        <View style={[styles.twoColGrid, isMobile && styles.twoColGridMobile]}>
           {/* PROBLEM CARD */}
-          <View style={[styles.infoCard, styles.problemCard]}>
+          <View style={[styles.infoCard, styles.problemCard, isMobile ? styles.infoCardMobile : styles.infoCardDesktop]}>
             <View style={styles.cardHeaderWithIcon}>
               <Text style={styles.cardIconRed}>⚠️</Text>
               <View>
@@ -358,7 +369,7 @@ export default function AboutScreen() {
           </View>
 
           {/* SOLUTION CARD */}
-          <View style={[styles.infoCard, styles.solutionCard]}>
+          <View style={[styles.infoCard, styles.solutionCard, isMobile ? styles.infoCardMobile : styles.infoCardDesktop]}>
             <View style={styles.cardHeaderWithIcon}>
               <Text style={styles.cardIconGreen}>✓</Text>
               <View>
@@ -404,28 +415,28 @@ export default function AboutScreen() {
         {/* VISUAL CONNECTOR BAR */}
         <View style={styles.visualConnectorCard}>
           <Text style={styles.connectorTitle}>THE OBJECTIVE EVIDENCE PIPELINE</Text>
-          <View style={styles.connectorRow}>
-            <View style={styles.connectorNode}>
+          <View style={[styles.connectorRow, isMobile && styles.connectorRowMobile]}>
+            <View style={[styles.connectorNode, isMobile && styles.connectorNodeMobile]}>
               <Text style={styles.connectorNodeIcon}>🧪</Text>
               <Text style={styles.connectorNodeTitle}>FIELD OBSERVATION</Text>
               <Text style={styles.connectorNodeSub}>Reagent Chemical Reaction</Text>
             </View>
 
             <View style={styles.connectorArrow}>
-              <Text style={styles.connectorArrowText}>➔</Text>
+              <Text style={styles.connectorArrowText}>{isMobile ? '↓' : '➔'}</Text>
             </View>
 
-            <View style={[styles.connectorNode, styles.connectorNodeActive]}>
+            <View style={[styles.connectorNode, styles.connectorNodeActive, isMobile && styles.connectorNodeMobile]}>
               <Text style={styles.connectorNodeIcon}>🔬</Text>
               <Text style={styles.connectorNodeTitle}>VERITRACE AI</Text>
               <Text style={styles.connectorNodeSub}>Optical Normalization & ΔE Match</Text>
             </View>
 
             <View style={styles.connectorArrow}>
-              <Text style={styles.connectorArrowText}>➔</Text>
+              <Text style={styles.connectorArrowText}>{isMobile ? '↓' : '➔'}</Text>
             </View>
 
-            <View style={styles.connectorNode}>
+            <View style={[styles.connectorNode, isMobile && styles.connectorNodeMobile]}>
               <Text style={styles.connectorNodeIcon}>🛡️</Text>
               <Text style={styles.connectorNodeTitle}>DIGITAL EVIDENCE</Text>
               <Text style={styles.connectorNodeSub}>SHA-256 / HMAC-SHA256 Sealed</Text>
@@ -443,10 +454,10 @@ export default function AboutScreen() {
         </View>
 
         <View style={styles.workflowContainer}>
-          <View style={styles.workflowProgressLine} />
-          <View style={styles.workflowGrid}>
+          {!isMobile && <View style={styles.workflowProgressLine} />}
+          <View style={[styles.workflowGrid, isMobile && styles.workflowGridMobile]}>
             {WORKFLOW_STEPS.map((step, idx) => (
-              <View key={idx} style={styles.workflowCard}>
+              <View key={idx} style={[styles.workflowCard, isMobile ? styles.workflowCardMobile : styles.workflowCardDesktop]}>
                 <View style={styles.workflowTopRow}>
                   <View style={styles.workflowNumBadge}>
                     <Text style={styles.workflowNum}>{step.num}</Text>
@@ -567,11 +578,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroLeftCol: {
+    width: '100%',
+  },
+  heroLeftColDesktop: {
     flex: 1.1,
   },
   heroRightCol: {
-    flex: 0.9,
     width: '100%',
+  },
+  heroRightColDesktop: {
+    flex: 0.9,
   },
   badgePill: {
     flexDirection: 'row',
@@ -1030,7 +1046,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   infoCard: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
@@ -1040,6 +1055,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 10,
     elevation: 2,
+  },
+  infoCardDesktop: {
+    flex: 1,
+  },
+  infoCardMobile: {
+    width: '100%',
   },
   problemCard: {
     borderColor: '#FECACA',
@@ -1214,7 +1235,6 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   workflowCard: {
-    flex: 1,
     backgroundColor: '#FFFFFF',
     borderRadius: 14,
     borderWidth: 1,
@@ -1225,6 +1245,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 6,
     elevation: 1,
+  },
+  workflowCardDesktop: {
+    flex: 1,
+  },
+  workflowCardMobile: {
+    width: '100%',
   },
   workflowTopRow: {
     flexDirection: 'row',
@@ -1407,5 +1433,64 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#94A3B8',
     marginTop: 4,
+  },
+
+  /* RESPONSIVE MOBILE OVERRIDES */
+  containerMobile: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  heroSectionMobile: {
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+  },
+  heroRowMobile: {
+    flexDirection: 'column',
+    gap: 20,
+  },
+  heroColMobile: {
+    width: '100%',
+  },
+  heroTitleMainMobile: {
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  heroTitleMainSmallMobile: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  heroTitleAccentMobile: {
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  heroTitleAccentSmallMobile: {
+    fontSize: 24,
+    lineHeight: 28,
+  },
+  heroCtaRowMobile: {
+    flexDirection: 'column',
+    width: '100%',
+    gap: 10,
+  },
+  ctaButtonMobile: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  twoColGridMobile: {
+    flexDirection: 'column',
+  },
+  connectorRowMobile: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  connectorNodeMobile: {
+    width: '100%',
+    minWidth: '100%',
+  },
+  workflowGridMobile: {
+    flexDirection: 'column',
   },
 });

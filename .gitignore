@@ -40,6 +40,9 @@ yarn-error.*
 /ios
 /android
 
+# Scratch & Temporary Testing
+scratch/
+
 # Backend
 backend/venv/
 **/__pycache__/
