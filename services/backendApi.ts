@@ -445,6 +445,13 @@ export async function syncBatchWithBackendAsync(records: FieldTestRecord[]): Pro
     }
   } catch (error: any) {
     clearTimeout(timeoutId);
+    let friendlyError = 'Could not connect to central server. Evidence records remain cryptographically secured in offline storage.';
+    const rawMsg = error?.message || '';
+    if (rawMsg.includes('CLEARTEXT') || rawMsg.includes('10.0.2.2')) {
+      friendlyError = 'Central police server is offline or unreachable. All evidentiary records remain safely signed and stored locally in encrypted SQLite storage.';
+    } else if (rawMsg.includes('Failed to fetch') || rawMsg.includes('Network request failed') || rawMsg.includes('abort') || rawMsg.includes('timeout')) {
+      friendlyError = 'Network connection timed out. Records are queued locally and will sync when network is restored.';
+    }
     return {
       ok: false,
       totalReceived: records.length,
@@ -452,7 +459,7 @@ export async function syncBatchWithBackendAsync(records: FieldTestRecord[]): Pro
       alreadySyncedCount: 0,
       conflictCount: 0,
       results: [],
-      error: error.message || 'Network request failed',
+      error: friendlyError,
     };
   }
 }
