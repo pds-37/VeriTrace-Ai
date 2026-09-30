@@ -20,10 +20,8 @@ export function getDefaultBackendUrl(): string {
   if (process.env.EXPO_PUBLIC_BACKEND_URL) {
     return process.env.EXPO_PUBLIC_BACKEND_URL.trim().replace(/\/+$/, '');
   }
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:8000';
-  }
-  return 'http://localhost:8000';
+  // Production Central Cloud Server (Live on Render)
+  return 'https://veritrace-ai-2.onrender.com';
 }
 
 /**
@@ -31,7 +29,7 @@ export function getDefaultBackendUrl(): string {
  */
 export async function getBackendBaseUrl(): Promise<string> {
   const savedUrl = await getSettingAsync(SETTING_BACKEND_URL_KEY, '');
-  if (savedUrl && savedUrl.trim()) {
+  if (savedUrl && savedUrl.trim() && !savedUrl.includes('10.0.2.2') && !savedUrl.includes('localhost')) {
     return savedUrl.trim().replace(/\/+$/, '');
   }
   return getDefaultBackendUrl();
@@ -45,29 +43,24 @@ export async function setBackendBaseUrl(url: string): Promise<void> {
   await setSettingAsync(SETTING_BACKEND_URL_KEY, sanitized);
 }
 
-export async function getAuthTokenAsync(): Promise<string> {
-  return await getSettingAsync(SETTING_AUTH_TOKEN_KEY, '');
-}
-
 export async function setAuthTokenAsync(token: string): Promise<void> {
   await setSettingAsync(SETTING_AUTH_TOKEN_KEY, token);
 }
 
-export async function loginAsync(username: string, password: string):Promise<{ok: boolean, token?: string, error?: string, role?: string}> {
+export async function loginAsync(username: string, password: string): Promise<{ok: boolean, token?: string, error?: string, role?: string}> {
   const baseUrl = await getBackendBaseUrl();
   const endpoint = `${baseUrl}/api/auth/token`;
   
-  const formData = new FormData();
-  formData.append('username', username);
-  formData.append('password', password);
+  const body = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
   
   try {
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
         'Bypass-Tunnel-Reminder': 'true'
       },
-      body: formData,
+      body,
     });
     
     if (response.ok) {
@@ -80,6 +73,23 @@ export async function loginAsync(username: string, password: string):Promise<{ok
   } catch (error: any) {
     return { ok: false, error: error.message || 'Network error' };
   }
+}
+
+export async function getAuthTokenAsync(): Promise<string> {
+  const existing = await getSettingAsync(SETTING_AUTH_TOKEN_KEY, '');
+  if (existing && existing.trim()) {
+    return existing.trim();
+  }
+  // Auto-acquire field officer session token so end-users never have to log in manually
+  try {
+    const authRes = await loginAsync('officer_1', 'field123');
+    if (authRes.ok && authRes.token) {
+      return authRes.token;
+    }
+  } catch (e) {
+    console.warn('Auto-auth error:', e);
+  }
+  return '';
 }
 
 export interface BackendHealthResult {
