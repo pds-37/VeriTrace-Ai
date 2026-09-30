@@ -368,7 +368,8 @@ export default function CaptureScreen() {
         calib.isCalibrated ? calib.rawSampleRgb : null,
         kitId,
         calib.lightingQuality,
-        calib.isCalibrated
+        calib.isCalibrated,
+        calib.notes
       );
       setClassificationResult(classification);
 

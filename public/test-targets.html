@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VeriTrace AI - Calibrated Optical Test Targets</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    .nav-bar {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tabs-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      background: #334155;
+      color: #ffffff;
+    }
+    .tab-btn.active {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+    }
+    .print-btn {
+      background: #10b981;
+      color: #ffffff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Target Display Area */
+    .stage-container {
+      width: 100%;
+      max-width: 900px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    }
+    .target-info-header {
+      width: 100%;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .target-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+    .target-subtitle {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    .badge-pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+    .badge-positive {
+      background: #064e3b;
+      color: #34d399;
+      border: 1px solid #059669;
+    }
+    .badge-negative {
+      background: #334155;
+      color: #cbd5e1;
+      border: 1px solid #64748b;
+    }
+
+    /* Calibrated Dual-Zone Physical Card Target */
+    .card-target-viewport {
+      width: 320px;
+      height: 480px;
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+      border: 3px solid #64748b;
+    }
+
+    /* Outer Reticle Alignment Markers */
+    .corner-mark {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-color: #0284c7;
+      border-style: solid;
+    }
+    .cm-tl { top: -2px; left: -2px; border-width: 4px 0 0 4px; }
+    .cm-tr { top: -2px; right: -2px; border-width: 4px 4px 0 0; }
+    .cm-bl { bottom: -2px; left: -2px; border-width: 0 0 4px 4px; }
+    .cm-br { bottom: -2px; right: -2px; border-width: 0 4px 4px 0; }
+
+    /* Zone Label (OUTSIDE patch to keep color 100% pure) */
+    .zone-section {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .zone-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 2px;
+    }
+    .zone-name {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .zone-name-01 { color: #0284c7; }
+    .zone-name-02 { color: #059669; }
+    .zone-spec {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    /* PURE SOLID COLOR PATCHES (No text inside) */
+    .pure-patch {
+      width: 100%;
+      height: 165px;
+      border-radius: 8px;
+      box-shadow: inset 0 0 6px rgba(0,0,0,0.15);
+    }
+    .patch-ref-gray {
+      background-color: #7A7877; /* Standard 18% Neutral Gray */
+      border: 2px solid #0284c7;
+    }
+    .patch-scott-blue {
+      background-color: #00308F; /* Scott Cobalt Thiocyanate Blue */
+      border: 2px solid #10b981;
+    }
+    .patch-marquis-heroin {
+      background-color: #400A3C; /* Marquis Heroin Violet */
+      border: 2px solid #10b981;
+    }
+    .patch-marquis-meth {
+      background-color: #B4552D; /* Marquis Meth Orange */
+      border: 2px solid #10b981;
+    }
+    .patch-scott-blank {
+      background-color: #E4D1D4; /* Scott Blank Pale Pink */
+      border: 2px solid #64748b;
+    }
+
+    /* Instructions Footer */
+    .instructions-footer {
+      margin-top: 24px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      padding: 16px 20px;
+      border-radius: 10px;
+      width: 100%;
+      max-width: 600px;
+    }
+    .instructions-footer h4 {
+      font-size: 13px;
+      color: #38bdf8;
+      margin-bottom: 6px;
+    }
+    .instructions-footer p {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        color: #000000;
+        padding: 0;
+      }
+      .nav-bar, .instructions-footer {
+        display: none !important;
+      }
+      .stage-container {
+        border: none;
+        box-shadow: none;
+        background: #ffffff;
+        padding: 0;
+      }
+      .card-target-viewport {
+        box-shadow: none;
+        border: 2px solid #000000;
+        page-break-inside: avoid;
+        margin: 20px auto;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="nav-bar">
+    <div class="brand-title">
+      <span>🔬</span> VeriTrace AI Test Target Suite
+    </div>
+    <div class="tabs-row">
+      <button class="tab-btn active" onclick="switchTarget('cocaine')">Target 1: Cocaine (Scott)</button>
+      <button class="tab-btn" onclick="switchTarget('heroin')">Target 2: Heroin (Marquis)</button>
+      <button class="tab-btn" onclick="switchTarget('meth')">Target 3: Meth (Marquis)</button>
+      <button class="tab-btn" onclick="switchTarget('blank')">Target 4: Negative Blank</button>
+    </div>
+    <button class="print-btn" onclick="window.print()">🖨️ Print Sheet</button>
+  </div>
+
+  <div class="stage-container">
+    <div class="target-info-header">
+      <h2 class="target-title" id="targetTitle">Target #1: Scott Reagent (Cocaine)</h2>
+      <p class="target-subtitle" id="targetSubtitle">Select <strong>Scott Reagent</strong> in the app carousel &bull; Align camera reticles</p>
+      <span class="badge-pill badge-positive" id="targetBadge">✓ EXPECTED OUTCOME: PRESUMPTIVE POSITIVE (Cocaine)</span>
+    </div>
+
+    <!-- CALIBRATED DUAL-ZONE CARD TARGET -->
+    <div class="card-target-viewport">
+      <div class="corner-mark cm-tl"></div>
+      <div class="corner-mark cm-tr"></div>
+      <div class="corner-mark cm-bl"></div>
+      <div class="corner-mark cm-br"></div>
+
+      <!-- Zone 1: Reference Gray Card -->
+      <div class="zone-section">
+        <div class="zone-label-row">
+          <span class="zone-name zone-name-01">01 - REFERENCE CARD (UPPER RETICLE)</span>
+          <span class="zone-spec">18% Neutral Gray &bull; #7A7877</span>
+        </div>
+        <!-- PURE COLOR: NO TEXT INSIDE TO PREVENT MOIRE / TEXT ARTIFACTS -->
+        <div class="pure-patch patch-ref-gray"></div>
+      </div>
+
+      <!-- Zone 2: Reaction Color Window -->
+      <div class="zone-section">
+        <div class="zone-label-row">
+          <span class="zone-name zone-name-02" id="reactionZoneName">02 - REACTION WINDOW (LOWER RETICLE)</span>
+          <span class="zone-spec" id="reactionZoneSpec">Cobalt Blue &bull; #00308F</span>
+        </div>
+        <!-- PURE COLOR: NO TEXT INSIDE -->
+        <div class="pure-patch patch-scott-blue" id="reactionPatch"></div>
+      </div>
+    </div>
+
+    <div class="instructions-footer">
+      <h4>📱 How to Aim Your Phone:</h4>
+      <p>
+        1. Hold phone <strong>20–30 cm</strong> away so this card fills your camera viewfinder.<br>
+        2. Line up the <strong>Blue Box</strong> over the Gray patch, and the <strong>Green Box</strong> over the Colored patch.<br>
+        3. Tap <strong>Capture Photo</strong>. The pure solid colors ensure 100% optical calibration and immediate green concordance!
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const TARGETS = {
+      cocaine: {
+        title: "Target #1: Scott Reagent (Cocaine)",
+        subtitle: "Select 'Scott Reagent' in app &bull; Align upper reticle to Gray, lower reticle to Blue",
+        badge: "✓ EXPECTED: PRESUMPTIVE POSITIVE (Cocaine)",
+        badgeClass: "badge-positive",
+        reactionLabel: "02 - REACTION WINDOW (LOWER RETICLE)",
+        reactionSpec: "Cobalt Blue &bull; #00308F",
+        patchClass: "patch-scott-blue"
+      },
+      heroin: {
+        title: "Target #2: Marquis Reagent (Heroin / Morphine)",
+        subtitle: "Select 'Marquis Reagent' in app &bull; Align upper reticle to Gray, lower reticle to Violet",
+        badge: "✓ EXPECTED: PRESUMPTIVE POSITIVE (Heroin / Opiates)",
+        badgeClass: "badge-positive",
+        reactionLabel: "02 - REACTION WINDOW (LOWER RETICLE)",
+        reactionSpec: "Deep Violet &bull; #400A3C",
+        patchClass: "patch-marquis-heroin"
+      },
+      meth: {
+        title: "Target #3: Marquis (Methamphetamine)",
+        subtitle: "Select 'Marquis Reagent' in app &bull; Align upper reticle to Gray, lower reticle to Orange",
+        badge: "✓ EXPECTED: PRESUMPTIVE POSITIVE (Methamphetamine)",
+        badgeClass: "badge-positive",
+        reactionLabel: "02 - REACTION WINDOW (LOWER RETICLE)",
+        reactionSpec: "Deep Orange &bull; #B4552D",
+        patchClass: "patch-marquis-meth"
+      },
+      blank: {
+        title: "Target #4: Negative Control (Blank Reagent)",
+        subtitle: "Select 'Scott Reagent' in app &bull; Align upper reticle to Gray, lower reticle to Pale Pink",
+        badge: "✓ EXPECTED: PRESUMPTIVE NEGATIVE (No Reaction)",
+        badgeClass: "badge-negative",
+        reactionLabel: "02 - REACTION WINDOW (LOWER RETICLE)",
+        reactionSpec: "Unreacted Blank &bull; #E4D1D4",
+        patchClass: "patch-scott-blank"
+      }
+    };
+
+    function switchTarget(key) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick')?.includes(key));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const data = TARGETS[key];
+      if (!data) return;
+
+      document.getElementById('targetTitle').textContent = data.title;
+      document.getElementById('targetSubtitle').innerHTML = data.subtitle;
+      
+      const badge = document.getElementById('targetBadge');
+      badge.textContent = data.badge;
+      badge.className = 'badge-pill ' + data.badgeClass;
+
+      document.getElementById('reactionZoneName').textContent = data.reactionLabel;
+      document.getElementById('reactionZoneSpec').innerHTML = data.reactionSpec;
+
+      const patch = document.getElementById('reactionPatch');
+      patch.className = 'pure-patch ' + data.patchClass;
+    }
+  </script>
+</body>
+</html>

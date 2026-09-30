@@ -185,11 +185,14 @@ export function validateReferenceCardPatch(
   }
 
   // 3. Patch Uniformity Check: Reference card patches are flat, uniform surfaces.
-  if (stdDev !== undefined && stdDev > 26) {
+  // Standard photographic gray cards have low spatial noise. Digital displays, camera compression,
+  // and screen moiré patterns exhibit moderate variance (σ ~25-40). Cluttered surfaces (keyboards,
+  // desks, fabrics) exhibit extreme spatial clutter (σ > 55).
+  if (stdDev !== undefined && stdDev > 45) {
     return {
       isValid: false,
       status: 'CALIBRATION_REQUIRED',
-      reason: `Reference region exhibits high spatial clutter/texture (σ = ${stdDev.toFixed(1)} > 26). Uniform card patch not detected.`,
+      reason: `Reference region exhibits high spatial clutter/texture (σ = ${stdDev.toFixed(1)} > 45). Ensure the gray card fills the upper reticle box without borders or text.`,
     };
   }
 
@@ -540,8 +543,9 @@ export async function extractDualZoneColorsAsync(
   base64Data?: string,
   fallbackKitId: string = 'scott'
 ): Promise<DualZoneExtractionResult> {
-  const refBox = { x1: 0.15, y1: 0.20, x2: 0.85, y2: 0.45 };
-  const reactionBox = { x1: 0.15, y1: 0.55, x2: 0.85, y2: 0.80 };
+  // Center-weighted Region of Interest (ROI): samples inner 50% core to prevent border/background bleeding
+  const refBox = { x1: 0.25, y1: 0.22, x2: 0.75, y2: 0.42 };
+  const reactionBox = { x1: 0.25, y1: 0.58, x2: 0.75, y2: 0.78 };
 
   // 1. Web Execution via Canvas API
   if (Platform.OS === 'web' && typeof document !== 'undefined' && typeof window !== 'undefined') {

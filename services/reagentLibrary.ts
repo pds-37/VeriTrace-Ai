@@ -323,7 +323,8 @@ export function classifyReagentReaction(
   rawRgb: [number, number, number] | null,
   kitId: string = 'scott',
   lightingQuality: 'GOOD' | 'MARGINAL' | 'POOR' = 'GOOD',
-  isCalibrated: boolean = true
+  isCalibrated: boolean = true,
+  calibrationNotes?: string
 ): ReagentClassificationResult {
   const kit = REAGENT_KITS.find(k => k.id === kitId) || REAGENT_KITS[0];
   const disclaimer = 'Presumptive field test result only. Does not replace laboratory confirmatory testing (GC-MS / HPLC).';
@@ -358,9 +359,9 @@ export function classifyReagentReaction(
       rawRgb: safeRawRgb,
       lightingQuality: isCalibrated ? lightingQuality : 'POOR',
       calibrationStatus: 'CALIBRATION_REQUIRED',
-      notes: !isCalibrated
+      notes: calibrationNotes || (!isCalibrated
         ? 'Reference card calibration is invalid or unverified. Presumptive substance classification cannot be performed without a valid in-frame reference card.'
-        : 'Ambient illumination was outside valid operational limits. Recalibrate with reference card under steady lighting.',
+        : 'Ambient illumination was outside valid operational limits. Recalibrate with reference card under steady lighting.'),
       disclaimer,
     };
   }
